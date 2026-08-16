@@ -48,7 +48,7 @@ Gemini CLI, OpenCode, Goose, Cline, Amp, and others are documented as tier-2 in
 
 ```bash
 # In your project:
-npx agent-recall install --agent claude codex cursor hermes pi
+npx agent-recall install --agent claude-code codex cursor hermes pi
 ```
 
 This writes the session-close hook config, an `AGENTS.md` pointer (and `CLAUDE.md` shim), and the

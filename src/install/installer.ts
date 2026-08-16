@@ -9,8 +9,15 @@ import { dirname, join } from "node:path";
 import { readFile, writeFile, mkdir, copyFile, stat } from "node:fs/promises";
 import { AGENTS_MARKER, AGENTS_SECTION, HOOK_CMD, README_STORE } from "./templates.js";
 import { AGENT_IDS, type AgentId } from "../sync/types.js";
+import { scanAndCompile } from "../sync/scan.js";
 
 const TIER1: AgentId[] = ["claude-code", "codex", "cursor", "hermes", "pi"];
+
+/** Accept friendly aliases (e.g. "claude" → "claude-code") so README ids resolve (F-1.2). */
+function normalizeAgent(id: string): string {
+  const aliases: Record<string, AgentId> = { claude: "claude-code", "claude-code": "claude-code" };
+  return aliases[id] ?? id;
+}
 
 async function exists(p: string): Promise<boolean> {
   try {
@@ -144,13 +151,15 @@ async function installCodexHook(projectDir: string): Promise<void> {
   }
   const hooks = (cfg["hooks"] as Record<string, unknown>) ?? {};
   const sessionEnd = (hooks["SessionEnd"] as unknown[]) ?? [];
+  // Codex caps SessionEnd at ~3s (1s default); a per-session sync is sub-second once warm.
   if (!JSON.stringify(sessionEnd).includes(HOOK_CMD)) {
-    sessionEnd.push({ hooks: [{ type: "command", command: HOOK_CMD, timeout: 15000 }] });
+    sessionEnd.push({ hooks: [{ type: "command", command: HOOK_CMD, timeout: 3000 }] });
   }
   hooks["SessionEnd"] = sessionEnd;
   cfg["hooks"] = hooks;
   await writeFile(file, JSON.stringify(cfg, null, 2) + "\n", "utf8");
   log("added SessionEnd hook to .codex/hooks.json");
+  log("  note: Codex hooks may require opt-in — run codex with `-c features.codex_hooks=true`");
 }
 
 async function installCursorHook(projectDir: string): Promise<void> {
@@ -191,12 +200,17 @@ export async function runInstall(args: string[]): Promise<void> {
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--agent") {
       let j = i + 1;
-      while (j < args.length && !args[j]!.startsWith("--")) requested.add(args[j++]!);
+      while (j < args.length && !args[j]!.startsWith("--"))
+        requested.add(normalizeAgent(args[j++]!));
     }
   }
   const agents: AgentId[] = requested.size ? TIER1.filter((a) => requested.has(a)) : TIER1;
   const unknown = [...requested].filter((r) => !AGENT_IDS.includes(r as AgentId));
   if (unknown.length) log(`ignoring unknown agent(s): ${unknown.join(", ")}`);
+  if (requested.size && agents.length === 0) {
+    log("no known agents matched — nothing to install. Valid ids: " + AGENT_IDS.join(", "));
+    return;
+  }
 
   log(`installing for: ${agents.join(", ")} in ${projectDir}`);
 
@@ -237,7 +251,29 @@ export async function runInstall(args: string[]): Promise<void> {
     }
   }
 
-  log(
-    "done. New sessions will sync on close; run `agent-recall sync --scan` now to backfill existing ones.",
-  );
+  // Backfill: load history that predates the hook. Setup does the existing sessions once; the
+  // session-close hooks handle everything from here on. Skip with --no-backfill.
+  if (args.includes("--no-backfill")) {
+    log(
+      "skipped backfill (--no-backfill). Run `agent-recall sync --scan` later to load existing sessions.",
+    );
+  } else {
+    log("backfilling existing sessions for this project…");
+    const home = process.env.HOME || process.env.USERPROFILE || "";
+    const results = await scanAndCompile({
+      cwd: projectDir,
+      storeDir: projectDir,
+      home,
+      env: process.env,
+      agents,
+      onError: (m) => log(m),
+    });
+    const added = results.reduce((n, r) => n + r.added, 0);
+    const sessions = results.filter((r) => r.added > 0).length;
+    log(
+      `backfill: ${added} event(s) from ${sessions} existing session(s) loaded into .agent-recall/`,
+    );
+  }
+
+  log("done. New sessions will sync on close.");
 }

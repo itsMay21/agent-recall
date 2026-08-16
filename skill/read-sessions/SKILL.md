@@ -23,8 +23,9 @@ the last agent do," or "why was X rejected."
 2. **Read the tail first.** Read the last ~50–100 lines (they are newest). Each line has: `ts`,
    `agent`, `session`, `role` (`user`/`assistant`/`tool`/`thinking`/`event`), optional `name` (tool),
    `status`, `preview` (a truncated snippet), and `raw` (a pointer).
-3. **Prefer signal.** Look first at `role:"user"` (what was asked), `role:"assistant"` (what was
-   decided), and any `status:"rejected"` or `status:"superseded"` (paths that were closed).
+3. **Prefer signal.** Look first at `role:"user"` (what was asked) and `role:"assistant"` (what was
+   decided). A `status:"error"` on a tool row marks an attempt that failed — often a dead end worth
+   not repeating.
 4. **Open raw only on demand.** Do NOT bulk-load `.agent-recall/raw/`. Follow a `raw` pointer
    (`raw/<agent>/<session>/events.jsonl#<seq>`) only when a specific decision is load-bearing and the
    `preview` isn't enough.

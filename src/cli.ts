@@ -6,43 +6,24 @@
 //
 // Design rule: `sync` must never crash the host agent. On error it warns to stderr and exits 0.
 
-import { stat } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
-import type { Adapter, HookInput } from "./sync/types.js";
-import { compileSession, type CompileResult } from "./sync/compile.js";
+import type { HookInput } from "./sync/types.js";
+import type { CompileResult } from "./sync/compile.js";
 import { storePaths } from "./sync/store.js";
-import { ADAPTERS, adapterForPath, adapterById } from "./adapters/registry.js";
+import { compileLocator, scanAndCompile } from "./sync/scan.js";
+import { adapterForPath, adapterById } from "./adapters/registry.js";
 import { runInstall } from "./install/installer.js";
 import { AGENT_IDS, type AgentId } from "./sync/types.js";
+
+const HOME = process.env.HOME || process.env.USERPROFILE || "";
 
 async function readStdin(): Promise<string> {
   if (process.stdin.isTTY) return "";
   const chunks: Buffer[] = [];
   for await (const c of process.stdin) chunks.push(c as Buffer);
   return Buffer.concat(chunks).toString("utf8");
-}
-
-async function fallbackTsFor(locator: string): Promise<string> {
-  const filePart = locator.includes("::") ? locator.slice(0, locator.lastIndexOf("::")) : locator;
-  try {
-    const s = await stat(filePart);
-    return new Date(s.mtimeMs).toISOString();
-  } catch {
-    return new Date().toISOString();
-  }
-}
-
-async function compileLocator(
-  adapter: Adapter,
-  locator: string,
-  storeDir: string,
-): Promise<CompileResult | null> {
-  const parsed = await adapter.parse(locator);
-  if (!parsed) return null;
-  const fallbackTs = await fallbackTsFor(locator);
-  return compileSession(parsed, { projectDir: storeDir, fallbackTs });
 }
 
 function flagValue(args: string[], name: string): string | undefined {
@@ -87,54 +68,48 @@ async function cmdSyncFromHook(): Promise<void> {
   }
   const projectDir = input.cwd || process.cwd();
   const path = input.transcript_path;
-  if (!path) {
-    process.stderr.write("agent-recall: hook payload had no transcript_path; try `sync --scan`\n");
+
+  // Path-bearing hooks (Claude/Codex/Cursor): pick the adapter by the transcript path.
+  if (path) {
+    const adapter = adapterForPath(path);
+    if (!adapter) {
+      process.stderr.write(`agent-recall: no adapter recognizes ${path}\n`);
+      return;
+    }
+    const result = await compileLocator(adapter, path, projectDir, HOME);
+    process.stdout.write(`agent-recall: ${result ? summarize([result]) : "nothing to sync"}\n`);
     return;
   }
-  const adapter = adapterForPath(path);
-  if (!adapter) {
-    process.stderr.write(`agent-recall: no adapter recognizes ${path}\n`);
+
+  // Hermes has no transcript file — its SessionEnd payload carries only a session_id. Build the
+  // <db>::<session-id> handle the Hermes adapter expects (F-1.7).
+  if (input.session_id) {
+    const dbPath = join(process.env.HERMES_DIR || join(HOME, ".hermes"), "state.db");
+    const handle = `${dbPath}::${input.session_id}`;
+    const result = await compileLocator(adapterById("hermes")!, handle, projectDir, HOME);
+    process.stdout.write(`agent-recall: ${result ? summarize([result]) : "nothing to sync"}\n`);
     return;
   }
-  const result = await compileLocator(adapter, path, projectDir);
-  process.stdout.write(`agent-recall: ${result ? summarize([result]) : "nothing to sync"}\n`);
+
+  process.stderr.write(
+    "agent-recall: hook payload had no transcript_path or session_id; try `sync --scan`\n",
+  );
 }
 
 async function cmdScan(args: string[]): Promise<void> {
   const projectDir = flagValue(args, "--cwd") || process.cwd();
   // --store lets the store live somewhere other than the scanned project (centralized store, or tests).
   const storeDir = flagValue(args, "--store") || projectDir;
-  const only = multiFlag(args, "--agent");
-  const adapters = only.length
-    ? only.map((id) => adapterById(id as AgentId)).filter((a): a is Adapter => Boolean(a))
-    : ADAPTERS;
+  const only = multiFlag(args, "--agent") as AgentId[];
 
-  const results: CompileResult[] = [];
-  for (const adapter of adapters) {
-    let locators: string[] = [];
-    try {
-      locators = await adapter.locate({
-        cwd: projectDir,
-        home: process.env.HOME || "",
-        env: process.env,
-      });
-    } catch (err) {
-      process.stderr.write(
-        `agent-recall: ${adapter.id} locate failed: ${(err as Error).message}\n`,
-      );
-      continue;
-    }
-    for (const loc of locators) {
-      try {
-        const r = await compileLocator(adapter, loc, storeDir);
-        if (r) results.push(r);
-      } catch (err) {
-        process.stderr.write(
-          `agent-recall: ${adapter.id} parse failed for ${loc}: ${(err as Error).message}\n`,
-        );
-      }
-    }
-  }
+  const results = await scanAndCompile({
+    cwd: projectDir,
+    storeDir,
+    home: HOME,
+    env: process.env,
+    agents: only,
+    onError: (msg) => process.stderr.write(`agent-recall: ${msg}\n`),
+  });
   process.stdout.write(
     `agent-recall: ${summarize(results)} in ${join(storeDir, ".agent-recall")}\n`,
   );
@@ -177,9 +152,9 @@ function usage(): void {
       "",
       "Usage:",
       "  agent-recall sync --from-hook          compile the transcript named on a hook's stdin JSON",
-      "  agent-recall sync --scan [--cwd DIR] [--agent ID ...]   find & compile a project's transcripts",
+      "  agent-recall sync --scan [--cwd DIR] [--store DIR] [--agent ID ...]   find & compile a project's transcripts",
       "  agent-recall read [--last N] [--cwd DIR]               print recent index rows",
-      "  agent-recall install [--agent ID ...] [--cwd DIR] [--user]   wire hooks + AGENTS.md + skill",
+      "  agent-recall install [--agent ID ...] [--cwd DIR]      wire hooks + AGENTS.md + skill",
       "",
       `  agents: ${AGENT_IDS.join(", ")}`,
       "",

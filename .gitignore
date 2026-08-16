@@ -24,6 +24,9 @@ coverage/
 # vendor auth files, secrets). The redacted index is committable per-project by the
 # consumer, but this tool's own repo does not ship a store.
 **/.agent-recall/raw/
+# This tool's own repo ships no store at all — ignore the whole dir + scratch (F-2.7).
+/.agent-recall/
+/tmp/
 
 # Local scratch
 scratch/

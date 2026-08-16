@@ -23,6 +23,12 @@ const TOKEN_RULES: TokenRule[] = [
     label: "aws-akid",
     re: /\b(?:A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}\b/g,
   },
+  // A bare 40-char AWS secret is indistinguishable from base64/hashes, so we only redact one that
+  // appears near the word "aws" (the spec pattern). Redacts the whole "aws …'SECRET'" span.
+  {
+    label: "aws-secret",
+    re: /aws[\s\S]{0,40}?['"][0-9a-zA-Z/+]{40}['"]/gi,
+  },
   { label: "github-pat", re: /\bghp_[A-Za-z0-9]{36}\b/g },
   { label: "github-fine", re: /\bgithub_pat_[A-Za-z0-9_]{22,255}\b/g },
   { label: "github-token", re: /\bgh[osur]_[A-Za-z0-9]{36,}\b/g },
@@ -42,9 +48,11 @@ const TOKEN_RULES: TokenRule[] = [
   { label: "jwt", re: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g },
 ];
 
-// Assignment-shaped secrets: keep the key, redact the value.
+// Assignment-shaped secrets: keep the key, redact the value. Two value forms: a quoted value may
+// contain spaces up to its closing quote (F-1.1 — the old space-free class leaked multi-word quoted
+// secrets); an unquoted value runs to the next whitespace/quote.
 const ASSIGNMENT_RE =
-  /\b(api[_-]?key|secret|token|password|passwd|pwd|auth|bearer|client[_-]?secret|private[_-]?key|access[_-]?key|db[_-]?pass|connection[_-]?string)\b(\s*[:=]\s*)(['"]?)([^\s'"]{6,})\3/gi;
+  /\b(api[_-]?key|secret|token|password|passwd|pwd|auth|bearer|client[_-]?secret|private[_-]?key|access[_-]?key|db[_-]?pass|connection[_-]?string)\b['"]?(\s*[:=]\s*)(?:(['"])([^\r\n]{6,}?)\3|([^\s'"]{6,}))/gi;
 
 // URLs carrying inline credentials: redact only the password segment.
 const URL_CRED_RE =
@@ -68,9 +76,10 @@ export function redactString(input: string): RedactResult {
     });
   }
 
-  out = out.replace(ASSIGNMENT_RE, (_m, key: string, sep: string, quote: string) => {
+  out = out.replace(ASSIGNMENT_RE, (_m, key: string, sep: string, quote: string | undefined) => {
     count++;
-    return `${key}${sep}${quote}${MARK("value")}${quote}`;
+    // group 3 (quote) present ⇒ quoted value: keep the quotes around the marker; else unquoted.
+    return quote ? `${key}${sep}${quote}${MARK("value")}${quote}` : `${key}${sep}${MARK("value")}`;
   });
 
   out = out.replace(URL_CRED_RE, (_m, pre: string, _pw: string, at: string) => {

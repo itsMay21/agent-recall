@@ -31,6 +31,10 @@ stays absent. See CHARTER §1 for the measured reason.
 - `plugin/` — the Claude Code plugin that bundles the hook + skill.
 - `test/` — vitest specs + `fixtures/` (redacted sample transcripts).
 - `docs/TESTING.md` — evidence from real-session runs.
+- `.claude/skills/running-headless-agent-workers/` — repo skill: when this session (Claude Code
+  or Codex) needs to spin up a headless **pi** worker, read its `SKILL.md` and follow it — launch
+  `pi -p` detached, judge by the worker's session JSONL (not stdout), reap it. Also carries verified
+  pi/claude/codex JSONL schemas + `scripts/session_digest.sh`, useful reference while writing adapters.
 
 ## Coding standards
 
