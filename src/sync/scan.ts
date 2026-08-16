@@ -28,7 +28,7 @@ export async function compileLocator(
   locator: string,
   storeDir: string,
   home: string,
-  subagents: SubagentMode = "full",
+  subagents: SubagentMode = "calls",
 ): Promise<CompileResult | null> {
   const parsed = await adapter.parse(locator);
   if (!parsed) return null;

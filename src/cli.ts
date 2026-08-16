@@ -51,10 +51,12 @@ function multiFlag(args: string[], name: string): string[] {
 }
 
 function summarize(results: CompileResult[]): string {
-  const added = results.reduce((n, r) => n + r.added, 0);
+  const indexed = results.reduce((n, r) => n + r.indexed, 0);
+  const rawOnly = results.reduce((n, r) => n + (r.added - r.indexed), 0);
   const redacted = results.reduce((n, r) => n + r.redacted, 0);
   const sessions = results.filter((r) => r.added > 0).length;
-  return `synced ${added} event(s) across ${sessions} session(s); ${redacted} secret span(s) redacted`;
+  const rawNote = rawOnly > 0 ? `; ${rawOnly} sub-agent event(s) kept raw-only` : "";
+  return `indexed ${indexed} event(s) across ${sessions} session(s)${rawNote}; ${redacted} secret span(s) redacted`;
 }
 
 async function cmdSyncFromHook(): Promise<void> {
@@ -80,7 +82,9 @@ async function cmdSyncFromHook(): Promise<void> {
       process.stderr.write(`agent-recall: no adapter recognizes ${path}\n`);
       return;
     }
-    const result = await compileLocator(adapter, path, projectDir, HOME);
+    // Hooks use the same default as scan (`calls`): a sub-agent transcript handed to a hook is kept
+    // raw-only, never dumped into the committable index (ADR-007).
+    const result = await compileLocator(adapter, path, projectDir, HOME, "calls");
     process.stdout.write(`agent-recall: ${result ? summarize([result]) : "nothing to sync"}\n`);
     return;
   }
@@ -90,7 +94,7 @@ async function cmdSyncFromHook(): Promise<void> {
   if (input.session_id) {
     const dbPath = join(process.env.HERMES_DIR || join(HOME, ".hermes"), "state.db");
     const handle = `${dbPath}::${input.session_id}`;
-    const result = await compileLocator(adapterById("hermes")!, handle, projectDir, HOME);
+    const result = await compileLocator(adapterById("hermes")!, handle, projectDir, HOME, "calls");
     process.stdout.write(`agent-recall: ${result ? summarize([result]) : "nothing to sync"}\n`);
     return;
   }
@@ -212,6 +216,16 @@ function usage(): void {
 
 async function main(): Promise<void> {
   const [cmd, ...rest] = process.argv.slice(2);
+  // Help is global: `-h`/`--help`/`help` on ANY verb prints usage and never runs the verb (C-2 —
+  // `install --help` must not perform a live install).
+  if (cmd === undefined || cmd === "-h" || cmd === "--help" || cmd === "help") {
+    usage();
+    return;
+  }
+  if (rest.includes("-h") || rest.includes("--help")) {
+    usage();
+    return;
+  }
   switch (cmd) {
     case "sync":
       if (rest.includes("--from-hook")) await cmdSyncFromHook();
@@ -222,12 +236,6 @@ async function main(): Promise<void> {
       break;
     case "install":
       await runInstall(rest);
-      break;
-    case undefined:
-    case "-h":
-    case "--help":
-    case "help":
-      usage();
       break;
     default:
       process.stderr.write(`agent-recall: unknown command '${cmd}'\n`);

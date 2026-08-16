@@ -36,7 +36,10 @@ export interface CompileOptions {
 export interface CompileResult {
   agent: string;
   session: string;
+  /** events written this run (to raw; equals `indexed` unless rawOnly). */
   added: number;
+  /** events written to the committable index this run (0 in rawOnly mode). */
+  indexed: number;
   skipped: number;
   redacted: number;
   /** index rows regenerated from raw because a previous run was torn between the two appends. */
@@ -150,6 +153,7 @@ export async function compileSession(
         agent: parsed.agent,
         session: parsed.session,
         added: 0,
+        indexed: 0,
         skipped: total,
         redacted: 0,
         reconciled,
@@ -178,6 +182,7 @@ export async function compileSession(
       agent: parsed.agent,
       session: parsed.session,
       added: rawRows.length,
+      indexed: rawOnly ? 0 : indexRows.length,
       skipped: rawCount,
       redacted,
       reconciled,

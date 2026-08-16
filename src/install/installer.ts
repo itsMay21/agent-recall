@@ -276,4 +276,8 @@ export async function runInstall(args: string[]): Promise<void> {
   }
 
   log("done. New sessions will sync on close.");
+  log(
+    "NOTE: the hooks run `npx --no-install agent-recall …` — install the binary locally so they resolve:",
+  );
+  log("  npm i -D agent-recall   (or install globally / use the Claude Code plugin)");
 }
