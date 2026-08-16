@@ -30,6 +30,10 @@ the last agent do," or "why was X rejected."
    `preview` isn't enough.
 5. **Grep for a topic.** To find prior work on something specific, grep the index for a keyword
    (e.g. `grep -i "auth" .agent-recall/index.jsonl`).
+6. **Compaction events are summaries.** A line with `role:"event"` and a `raw` pointer whose native
+   type is `compaction` carries the harness's own summary of the turns before it. Treat it as a lossy
+   recap, not a source of truth — the original turns are still present earlier in the same session, so
+   don't assume the summary is the whole story.
 
 ## Rules (non-negotiable)
 

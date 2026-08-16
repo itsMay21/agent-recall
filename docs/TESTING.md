@@ -49,6 +49,15 @@ where it did not.
   (`{transcript_path, cwd, session_id, reason}`) into `agent-recall sync --from-hook` compiled the
   named transcript and `agent-recall read` rendered the rows back.
 
+### Compaction / summarized context
+
+- Native transcripts are append-only, so the **original (uncompacted) turns are always retained** —
+  agent-recall keeps them all. The compaction record itself is captured as a `role:"event"` line with
+  `native_type:"compaction"` whose text is the harness's own summary (Codex `payload.message`, Pi
+  `compaction.summary`); we never re-expand `replacement_history` / `retainedTail` (that would
+  duplicate turns already present). Covered by unit tests for Codex and Pi. Claude and Hermes emit no
+  separate summary row (Hermes `compacted=1` rows are retained originals), so nothing is lost there.
+
 ### Not yet tested against a live install
 
 - **Cursor:** no `~/.cursor` on the build machine (IDE-only usage stores under `~/Library`). The

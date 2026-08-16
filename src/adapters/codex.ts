@@ -161,8 +161,17 @@ export const codexAdapter: Adapter = {
       } else if (type === "response_item" && payload) {
         const ev = responseItemToEvent(payload, ts);
         if (ev) events.push(ev);
-      } else if (type === "compacted") {
-        events.push({ role: "event", nativeType: "compacted", ...(ts ? { ts } : {}) });
+      } else if (type === "compacted" && payload) {
+        // Capture the compaction summary text (payload.message). The compacted-away originals live in
+        // payload.replacement_history AND already appear earlier in the append-only file, so we do not
+        // re-expand them. codexText ignores any embedded image blocks (image-bomb safe).
+        const summary = codexText(payload["message"]);
+        events.push({
+          role: "event",
+          nativeType: "compaction",
+          ...(summary ? { text: summary } : {}),
+          ...(ts ? { ts } : {}),
+        });
       }
     }
 

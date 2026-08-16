@@ -153,6 +153,9 @@ export const hermesAdapter: Adapter = {
         )
         .all(sessionId) as unknown as MessageRow[];
 
+      // We include every message regardless of the `compacted` flag: a compacted=1 row is an original
+      // turn that Hermes dropped from the live context window, not a summary — retaining it is exactly
+      // the "keep the uncompacted history" guarantee. Hermes has no separate summary row to capture.
       const events: RawEvent[] = [];
       for (const m of rows) {
         const ts = typeof m.timestamp === "number" ? epochToIso(m.timestamp) : undefined;

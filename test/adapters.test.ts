@@ -107,6 +107,40 @@ describe("codex adapter", () => {
     // event_msg text must not appear (no double counting)
     expect(JSON.stringify(s!.events)).not.toContain("DUPLICATE_TEXT");
   });
+
+  it("captures a compaction summary as an event without re-expanding replaced history", async () => {
+    const file = await fixture("rollout-c.jsonl", [
+      { type: "session_meta", payload: { id: "cx2", cwd: "/proj" } },
+      {
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: "start" }],
+        },
+      },
+      {
+        type: "compacted",
+        payload: {
+          message: "Summary of earlier turns: set up the parser.",
+          replacement_history: [
+            {
+              type: "message",
+              role: "user",
+              content: [{ type: "input_text", text: "SHOULD_NOT_APPEAR" }],
+            },
+          ],
+          window_id: "w2",
+        },
+      },
+    ]);
+    const s = await codexAdapter.parse(file);
+    const ev = s!.events.find((e) => e.nativeType === "compaction")!;
+    expect(ev.role).toBe("event");
+    expect(ev.text).toBe("Summary of earlier turns: set up the parser.");
+    // the compacted-away originals must not be re-expanded into new events
+    expect(JSON.stringify(s!.events)).not.toContain("SHOULD_NOT_APPEAR");
+  });
 });
 
 describe("pi adapter", () => {
@@ -140,6 +174,23 @@ describe("pi adapter", () => {
     expect(roles(s!.events)).toEqual(["user", "assistant", "tool", "tool"]);
     expect(names(s!.events)).toEqual(["read_file", "read_file"]);
     expect(s!.events.find((e) => e.role === "tool" && e.name === "read_file")!.text).toBe("a.ts");
+  });
+
+  it("captures a compaction entry's summary text", async () => {
+    const file = await fixture("2026_pic.jsonl", [
+      { type: "session", id: "pic", cwd: "/proj", timestamp: "2026-08-15T00:00:00Z" },
+      { type: "message", message: { role: "user", content: "hi" } },
+      {
+        type: "compaction",
+        summary: "Recap: implemented the walker.",
+        tokensBefore: 50000,
+        retainedTail: [],
+      },
+    ]);
+    const s = await piAdapter.parse(file);
+    const ev = s!.events.find((e) => e.nativeType === "compaction")!;
+    expect(ev.role).toBe("event");
+    expect(ev.text).toBe("Recap: implemented the walker.");
   });
 });
 

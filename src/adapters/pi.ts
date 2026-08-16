@@ -108,11 +108,17 @@ export const piAdapter: Adapter = {
             ...(ts ? { ts } : {}),
           });
         }
-      } else if (
-        type === "model_change" ||
-        type === "thinking_level_change" ||
-        type === "compaction"
-      ) {
+      } else if (type === "compaction") {
+        // Pi keeps the pre-compaction turns in the tree; the compaction entry carries a summary of
+        // them. Capture the summary text so the compacted span is accounted for, not dropped.
+        const summary = asString(line["summary"]);
+        events.push({
+          role: "event",
+          nativeType: "compaction",
+          ...(summary ? { text: summary } : {}),
+          ...(ts ? { ts } : {}),
+        });
+      } else if (type === "model_change" || type === "thinking_level_change") {
         events.push({ role: "event", nativeType: type as string, ...(ts ? { ts } : {}) });
       }
       // `custom` and any unknown types are intentionally skipped from the conversational index.

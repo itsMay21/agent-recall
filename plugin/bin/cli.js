@@ -554,8 +554,14 @@ var codexAdapter = {
       } else if (type === "response_item" && payload) {
         const ev = responseItemToEvent(payload, ts);
         if (ev) events.push(ev);
-      } else if (type === "compacted") {
-        events.push({ role: "event", nativeType: "compacted", ...ts ? { ts } : {} });
+      } else if (type === "compacted" && payload) {
+        const summary = codexText(payload["message"]);
+        events.push({
+          role: "event",
+          nativeType: "compaction",
+          ...summary ? { text: summary } : {},
+          ...ts ? { ts } : {}
+        });
       }
     }
     if (events.length === 0) return null;
@@ -881,7 +887,15 @@ var piAdapter = {
             ...ts ? { ts } : {}
           });
         }
-      } else if (type === "model_change" || type === "thinking_level_change" || type === "compaction") {
+      } else if (type === "compaction") {
+        const summary = asString(line["summary"]);
+        events.push({
+          role: "event",
+          nativeType: "compaction",
+          ...summary ? { text: summary } : {},
+          ...ts ? { ts } : {}
+        });
+      } else if (type === "model_change" || type === "thinking_level_change") {
         events.push({ role: "event", nativeType: type, ...ts ? { ts } : {} });
       }
     }

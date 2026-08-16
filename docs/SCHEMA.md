@@ -53,6 +53,12 @@ ever written by a model — every value is copied from the native transcript or 
   unless they were their own turn; the index carries only the envelope's existence, never base64.
 - **Idempotency key:** `(agent, session, seq)`. Re-running `sync` over an unchanged transcript appends
   nothing new.
+- **Compaction is captured, not expanded.** When a harness compacts context, the original turns stay in
+  the append-only transcript (we keep them all — the "uncompacted history"). The compaction record
+  itself becomes a `role:"event"` line with `native_type:"compaction"` whose `preview`/`text` is the
+  harness-written summary of the turns before it. We never re-expand the compacted-away copy
+  (`replacement_history` / `retainedTail`) — that would duplicate turns already present. A consumer that
+  sees a `compaction` event should read it as a lossy summary of earlier turns, with the originals above.
 
 ## Raw sidecar — `.agent-recall/raw/<agent>/<session>/`
 
