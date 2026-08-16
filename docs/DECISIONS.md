@@ -2,6 +2,22 @@
 
 Short, dated records of the load-bearing calls. Newest first.
 
+## ADR-007 — Sub-agent ingestion: tag mechanically, default `calls` (2026-08-16)
+
+**Decision:** Sub-agent / sidechain streams are ingested behind `sync --subagents off|calls|full`,
+default **`calls`**. Detection is mechanical, from native typed fields only (Claude `isSidechain` +
+`sessionId` + `agentId`; Codex `thread_source:"subagent"` + `parent_thread_id` + `source.subagent.other`).
+A sub-agent session is namespaced `<parentSession>/<spawnKey>` and tagged `origin`/`subagent_of`/
+`subagent_kind`. `calls` writes the sub-agent thread to `raw/` only (drill-down) — the parent's spawn
+call+output are already in the index; `full` also indexes the stream; `off` ignores it. `read`
+gains `--top-level` and `--subagent-of`.
+**Why:** Owner chose "calls default + drill-down". Sub-agent work is often the most exploratory/
+rejected-path-heavy (worth recalling), but indexing every sub-agent event by default bloats the index
+and risks double-counting, so the lightweight default keeps the index clean while raw preserves the
+full thread. Pi (`subagent-artifacts/`, parent attribution ambiguous → omit parent) and Cursor
+(no local data) are deferred; see `docs/design/SUBAGENTS-INVESTIGATION.md`.
+**Status:** accepted; Claude + Codex implemented and verified on real data (TESTING.md).
+
 ## ADR-006 — Mechanical memory digest is optional and extraction-only (2026-08-16)
 
 **Decision:** A per-project memory digest (`.agent-recall/decisions.md`) is a deferred, off-by-default

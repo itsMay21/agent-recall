@@ -111,7 +111,9 @@ async function* walkRollouts(dir: string): AsyncGenerator<string> {
   }
 }
 
-async function firstLineCwd(file: string): Promise<{ cwd?: string; session?: string }> {
+async function firstLineMeta(
+  file: string,
+): Promise<{ cwd?: string; session?: string; isSubagent?: boolean }> {
   for await (const line of readJsonl(file)) {
     if (line["type"] === "session_meta") {
       const payload = line["payload"] as Record<string, unknown> | undefined;
@@ -120,11 +122,21 @@ async function firstLineCwd(file: string): Promise<{ cwd?: string; session?: str
         ...(payload && typeof (payload["id"] ?? payload["session_id"]) === "string"
           ? { session: (payload["id"] ?? payload["session_id"]) as string }
           : {}),
+        isSubagent: payload?.["thread_source"] === "subagent",
       };
     }
     return {};
   }
   return {};
+}
+
+/** Codex `source` is "vscode" | {"subagent":{"other":"guardian"}} — extract the typed kind. */
+function subagentKindOf(source: unknown): string | undefined {
+  if (source && typeof source === "object") {
+    const sub = (source as Record<string, unknown>)["subagent"];
+    if (sub && typeof sub === "object") return asString((sub as Record<string, unknown>)["other"]);
+  }
+  return undefined;
 }
 
 export const codexAdapter: Adapter = {
@@ -139,8 +151,11 @@ export const codexAdapter: Adapter = {
     const dir = join(codexHome(opts.env), "sessions");
     const out: string[] = [];
     for await (const file of walkRollouts(dir)) {
-      const meta = await firstLineCwd(file);
-      if (meta.cwd === opts.cwd) out.push(file);
+      const meta = await firstLineMeta(file);
+      if (meta.cwd !== opts.cwd) continue;
+      // Forks (thread_source:"subagent") inherit the parent cwd, so they match here; skip when off.
+      if (meta.isSubagent && opts.subagents === "off") continue;
+      out.push(file);
     }
     return out;
   },
@@ -149,6 +164,9 @@ export const codexAdapter: Adapter = {
     const events: RawEvent[] = [];
     let cwd: string | undefined;
     let session: string | undefined;
+    let subagentOf: string | undefined;
+    let subagentKind: string | undefined;
+    let isSub = false;
 
     for await (const line of readJsonl(file)) {
       const type = line["type"];
@@ -158,6 +176,12 @@ export const codexAdapter: Adapter = {
         if (typeof payload["cwd"] === "string") cwd = payload["cwd"];
         const id = payload["id"] ?? payload["session_id"];
         if (typeof id === "string") session = id;
+        if (payload["thread_source"] === "subagent") {
+          isSub = true;
+          if (typeof payload["parent_thread_id"] === "string")
+            subagentOf = payload["parent_thread_id"];
+          subagentKind = subagentKindOf(payload["source"]);
+        }
       } else if (type === "response_item" && payload) {
         const ev = responseItemToEvent(payload, ts);
         if (ev) events.push(ev);
@@ -180,6 +204,9 @@ export const codexAdapter: Adapter = {
       agent: "codex",
       session: session ?? fileStem(file),
       ...(cwd ? { cwd } : {}),
+      ...(isSub ? { origin: "subagent" as const } : {}),
+      ...(subagentOf ? { subagentOf } : {}),
+      ...(subagentKind ? { subagentKind } : {}),
       events,
       sourceFiles: [file],
     };

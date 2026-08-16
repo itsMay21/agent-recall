@@ -118,6 +118,13 @@ export const claudeAdapter: Adapter = {
     const out: string[] = [];
     for (const name of await listDir(dir)) {
       if (name.endsWith(".jsonl")) out.push(join(dir, name));
+      // Sub-agent sidechains live in <projectDir>/<sessionId>/subagents/agent-*.jsonl.
+      else if (opts.subagents !== "off") {
+        const subDir = join(dir, name, "subagents");
+        for (const sub of await listDir(subDir)) {
+          if (sub.endsWith(".jsonl")) out.push(join(subDir, sub));
+        }
+      }
     }
     return out;
   },
@@ -126,12 +133,20 @@ export const claudeAdapter: Adapter = {
     const events: RawEvent[] = [];
     let cwd: string | undefined;
     let gitBranch: string | undefined;
+    let isSidechain = false;
+    let parentSession: string | undefined;
+    let agentId: string | undefined;
 
     for await (const line of readJsonl(file)) {
       const type = line["type"];
       if (typeof type !== "string" || SKIP_TYPES.has(type)) continue;
       if (!cwd && typeof line["cwd"] === "string") cwd = line["cwd"];
       if (!gitBranch && typeof line["gitBranch"] === "string") gitBranch = line["gitBranch"];
+      // Sub-agent linkage: subagent lines carry isSidechain + the parent sessionId + agentId.
+      if (line["isSidechain"] === true) isSidechain = true;
+      if (!parentSession && typeof line["sessionId"] === "string")
+        parentSession = line["sessionId"];
+      if (!agentId && typeof line["agentId"] === "string") agentId = line["agentId"];
 
       const ts = asString(line["timestamp"]);
       const message = line["message"] as Record<string, unknown> | undefined;
@@ -145,12 +160,18 @@ export const claudeAdapter: Adapter = {
     }
 
     if (events.length === 0) return null;
-    const session = basename(file).replace(/\.jsonl$/, "");
+    const fileStem = basename(file).replace(/\.jsonl$/, "");
+    // agent-<id>.jsonl → agentId; fall back to the line-level agentId.
+    const key = agentId ?? fileStem.replace(/^agent-/, "");
+    const sub = isSidechain && parentSession !== undefined;
     return {
       agent: "claude-code",
-      session,
+      session: sub ? `${parentSession}/${key}` : fileStem,
       ...(cwd ? { cwd } : {}),
       ...(gitBranch ? { gitBranch } : {}),
+      ...(isSidechain && parentSession !== undefined
+        ? { origin: "subagent" as const, subagentOf: parentSession }
+        : {}),
       events,
       sourceFiles: [file],
     };

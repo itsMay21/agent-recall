@@ -239,7 +239,12 @@ describe.skipIf(!hasSqlite)("hermes adapter (sqlite)", () => {
     db.close();
 
     const env = { ...process.env, HERMES_DIR: dir };
-    const handles = await hermesAdapter.locate({ cwd: "/proj", home: dir, env });
+    const handles = await hermesAdapter.locate({
+      cwd: "/proj",
+      home: dir,
+      env,
+      subagents: "calls",
+    });
     expect(handles).toHaveLength(1);
     const s = await hermesAdapter.parse(handles[0]!);
     expect(s!.agent).toBe("hermes");

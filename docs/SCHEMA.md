@@ -41,6 +41,22 @@ ever written by a model — every value is copied from the native transcript or 
 | `ts_source`  | `native` \| `mtime`                                                  | no       | Present and `mtime` only when `ts` was derived from file modification time because the record had no timestamp.                                                                                                       |
 | `redacted`   | number                                                               | no       | Count of spans redacted in this line's fields. Present only when > 0. Lets a reader know a value was scrubbed.                                                                                                        |
 
+## Sub-agent fields (optional)
+
+When a session is a sub-agent / sidechain stream, these are added (all optional; absent for top-level
+sessions). See DECISIONS.md ADR-007.
+
+| Field           | Type         | Meaning                                                                                     |
+| --------------- | ------------ | ------------------------------------------------------------------------------------------- |
+| `origin`        | `"subagent"` | Marks a sub-agent stream. Omitted for top-level sessions.                                   |
+| `subagent_of`   | string       | Parent session id — only when the native store records a structural link (never inferred).  |
+| `subagent_kind` | string       | Native typed kind (e.g. Codex `source.subagent.other`). Omitted when not natively recorded. |
+
+A sub-agent's `session` is namespaced `<parentSessionId>/<spawnKey>` (Claude `agentId`, etc.) so it
+can't collide with the parent. Ingestion depth is set by `sync --subagents off|calls|full` (default
+`calls`): `calls` keeps the full sub-agent thread in `raw/` only (the parent's spawn call+output are
+already in the index); `full` also indexes the sub-agent stream (tagged as above); `off` ignores it.
+
 ## Rules
 
 - **Copy typed fields; never invent.** If Cursor's JSONL has no tool args, `name` is absent — the row

@@ -7,6 +7,9 @@ export type AgentId = (typeof AGENT_IDS)[number];
 export type Role = "user" | "assistant" | "tool" | "thinking" | "system" | "event";
 export type Status = "ok" | "error" | "rejected" | "superseded";
 
+/** How sub-agent / sidechain transcripts are ingested. See docs/DECISIONS.md ADR-007. */
+export type SubagentMode = "off" | "calls" | "full";
+
 /** An attachment as an adapter hands it over: may still carry raw bytes we must hash and drop. */
 export interface InputAttachment {
   kind: "image" | "binary";
@@ -54,6 +57,12 @@ export interface ParsedSession {
   events: RawEvent[];
   /** absolute path(s) of the native source file(s), copied verbatim into raw/. */
   sourceFiles: string[];
+  /** present + "subagent" when this is a sub-agent / sidechain stream, not a top-level session. */
+  origin?: "subagent";
+  /** parent session id, only when the native store records a structural link (never inferred). */
+  subagentOf?: string;
+  /** native typed sub-agent kind (e.g. Codex source.subagent.other, Pi agent name). */
+  subagentKind?: string;
 }
 
 export interface LocateOptions {
@@ -63,6 +72,8 @@ export interface LocateOptions {
   home: string;
   /** environment (for CODEX_HOME, PI_SESSIONS_DIR, etc.). */
   env: NodeJS.ProcessEnv;
+  /** whether to locate sub-agent transcripts; "off" excludes them from the returned locators. */
+  subagents: SubagentMode;
 }
 
 /** The contract every per-agent adapter implements. */
@@ -92,6 +103,12 @@ export interface IndexLine {
   raw?: string;
   ts_source?: "mtime";
   redacted?: number;
+  /** "subagent" for a sub-agent stream (omitted for top-level sessions). */
+  origin?: "subagent";
+  /** parent session id when structurally linked. */
+  subagent_of?: string;
+  /** native typed sub-agent kind. */
+  subagent_kind?: string;
 }
 
 /** A line in the raw sidecar events.jsonl — the index superset with full args/stdout. */

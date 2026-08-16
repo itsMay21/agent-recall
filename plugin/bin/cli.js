@@ -275,6 +275,9 @@ function buildLines(parsed, ev, seq, fallbackTs, home2, rawPointer) {
     role: ev.role,
     ...parsed.cwd ? { cwd: parsed.cwd } : {},
     ...parsed.gitBranch ? { git_branch: parsed.gitBranch } : {},
+    ...parsed.origin ? { origin: parsed.origin } : {},
+    ...parsed.subagentOf ? { subagent_of: parsed.subagentOf } : {},
+    ...parsed.subagentKind ? { subagent_kind: parsed.subagentKind } : {},
     ...ev.name ? { name: ev.name } : {},
     ...ev.status ? { status: ev.status } : {},
     ...preview ? { preview } : {},
@@ -310,12 +313,15 @@ async function compileSession(parsed, opts) {
   const lock = await acquireLock(paths.root);
   try {
     const rawCount = await countLines(rawEventsFile);
-    const idxCount = await countSessionIndexRows(paths.index, parsed.agent, parsed.session);
+    const rawOnly = opts.rawOnly === true;
     let reconciled = 0;
-    if (idxCount < rawCount) {
-      const missing = await readRawRange(rawEventsFile, idxCount, rawCount);
-      await appendJsonl(paths.index, missing.map(rawToIndex));
-      reconciled = missing.length;
+    if (!rawOnly) {
+      const idxCount = await countSessionIndexRows(paths.index, parsed.agent, parsed.session);
+      if (idxCount < rawCount) {
+        const missing = await readRawRange(rawEventsFile, idxCount, rawCount);
+        await appendJsonl(paths.index, missing.map(rawToIndex));
+        reconciled = missing.length;
+      }
     }
     const total = parsed.events.length;
     if (total <= rawCount) {
@@ -341,11 +347,11 @@ async function compileSession(parsed, opts) {
       redacted += built.redacted;
     }
     await appendJsonl(rawEventsFile, rawRows);
-    await appendJsonl(paths.index, indexRows);
+    if (!rawOnly) await appendJsonl(paths.index, indexRows);
     return {
       agent: parsed.agent,
       session: parsed.session,
-      added: indexRows.length,
+      added: rawRows.length,
       skipped: rawCount,
       redacted,
       reconciled
@@ -515,6 +521,12 @@ var claudeAdapter = {
     const out = [];
     for (const name of await listDir(dir)) {
       if (name.endsWith(".jsonl")) out.push(join3(dir, name));
+      else if (opts.subagents !== "off") {
+        const subDir = join3(dir, name, "subagents");
+        for (const sub of await listDir(subDir)) {
+          if (sub.endsWith(".jsonl")) out.push(join3(subDir, sub));
+        }
+      }
     }
     return out;
   },
@@ -522,11 +534,18 @@ var claudeAdapter = {
     const events = [];
     let cwd;
     let gitBranch;
+    let isSidechain = false;
+    let parentSession;
+    let agentId;
     for await (const line of readJsonl(file)) {
       const type = line["type"];
       if (typeof type !== "string" || SKIP_TYPES.has(type)) continue;
       if (!cwd && typeof line["cwd"] === "string") cwd = line["cwd"];
       if (!gitBranch && typeof line["gitBranch"] === "string") gitBranch = line["gitBranch"];
+      if (line["isSidechain"] === true) isSidechain = true;
+      if (!parentSession && typeof line["sessionId"] === "string")
+        parentSession = line["sessionId"];
+      if (!agentId && typeof line["agentId"] === "string") agentId = line["agentId"];
       const ts = asString(line["timestamp"]);
       const message = line["message"];
       if (type === "user" || type === "assistant") {
@@ -537,12 +556,15 @@ var claudeAdapter = {
       }
     }
     if (events.length === 0) return null;
-    const session = basename2(file).replace(/\.jsonl$/, "");
+    const fileStem2 = basename2(file).replace(/\.jsonl$/, "");
+    const key = agentId ?? fileStem2.replace(/^agent-/, "");
+    const sub = isSidechain && parentSession !== void 0;
     return {
       agent: "claude-code",
-      session,
+      session: sub ? `${parentSession}/${key}` : fileStem2,
       ...cwd ? { cwd } : {},
       ...gitBranch ? { gitBranch } : {},
+      ...isSidechain && parentSession !== void 0 ? { origin: "subagent", subagentOf: parentSession } : {},
       events,
       sourceFiles: [file]
     };
@@ -637,18 +659,26 @@ async function* walkRollouts(dir) {
     else if (e.isFile() && e.name.startsWith("rollout-") && e.name.endsWith(".jsonl")) yield full;
   }
 }
-async function firstLineCwd(file) {
+async function firstLineMeta(file) {
   for await (const line of readJsonl(file)) {
     if (line["type"] === "session_meta") {
       const payload = line["payload"];
       return {
         ...payload && typeof payload["cwd"] === "string" ? { cwd: payload["cwd"] } : {},
-        ...payload && typeof (payload["id"] ?? payload["session_id"]) === "string" ? { session: payload["id"] ?? payload["session_id"] } : {}
+        ...payload && typeof (payload["id"] ?? payload["session_id"]) === "string" ? { session: payload["id"] ?? payload["session_id"] } : {},
+        isSubagent: payload?.["thread_source"] === "subagent"
       };
     }
     return {};
   }
   return {};
+}
+function subagentKindOf(source) {
+  if (source && typeof source === "object") {
+    const sub = source["subagent"];
+    if (sub && typeof sub === "object") return asString(sub["other"]);
+  }
+  return void 0;
 }
 var codexAdapter = {
   id: "codex",
@@ -660,8 +690,10 @@ var codexAdapter = {
     const dir = join4(codexHome(opts.env), "sessions");
     const out = [];
     for await (const file of walkRollouts(dir)) {
-      const meta = await firstLineCwd(file);
-      if (meta.cwd === opts.cwd) out.push(file);
+      const meta = await firstLineMeta(file);
+      if (meta.cwd !== opts.cwd) continue;
+      if (meta.isSubagent && opts.subagents === "off") continue;
+      out.push(file);
     }
     return out;
   },
@@ -669,6 +701,9 @@ var codexAdapter = {
     const events = [];
     let cwd;
     let session;
+    let subagentOf;
+    let subagentKind;
+    let isSub = false;
     for await (const line of readJsonl(file)) {
       const type = line["type"];
       const ts = asString(line["timestamp"]);
@@ -677,6 +712,12 @@ var codexAdapter = {
         if (typeof payload["cwd"] === "string") cwd = payload["cwd"];
         const id = payload["id"] ?? payload["session_id"];
         if (typeof id === "string") session = id;
+        if (payload["thread_source"] === "subagent") {
+          isSub = true;
+          if (typeof payload["parent_thread_id"] === "string")
+            subagentOf = payload["parent_thread_id"];
+          subagentKind = subagentKindOf(payload["source"]);
+        }
       } else if (type === "response_item" && payload) {
         const ev = responseItemToEvent(payload, ts);
         if (ev) events.push(ev);
@@ -695,6 +736,9 @@ var codexAdapter = {
       agent: "codex",
       session: session ?? fileStem(file),
       ...cwd ? { cwd } : {},
+      ...isSub ? { origin: "subagent" } : {},
+      ...subagentOf ? { subagentOf } : {},
+      ...subagentKind ? { subagentKind } : {},
       events,
       sourceFiles: [file]
     };
@@ -1061,26 +1105,39 @@ async function fallbackTsFor(locator) {
     return (/* @__PURE__ */ new Date()).toISOString();
   }
 }
-async function compileLocator(adapter, locator, storeDir, home2) {
+async function compileLocator(adapter, locator, storeDir, home2, subagents = "full") {
   const parsed = await adapter.parse(locator);
   if (!parsed) return null;
+  const isSub = parsed.origin === "subagent";
+  if (isSub && subagents === "off") return null;
   const fallbackTs = await fallbackTsFor(locator);
-  return compileSession(parsed, { projectDir: storeDir, fallbackTs, home: home2 });
+  return compileSession(parsed, {
+    projectDir: storeDir,
+    fallbackTs,
+    home: home2,
+    rawOnly: isSub && subagents === "calls"
+  });
 }
 async function scanAndCompile(opts) {
   const adapters = opts.agents?.length ? opts.agents.map((id) => adapterById(id)).filter((a) => Boolean(a)) : ADAPTERS;
+  const subagents = opts.subagents ?? "calls";
   const results = [];
   for (const adapter of adapters) {
     let locators = [];
     try {
-      locators = await adapter.locate({ cwd: opts.cwd, home: opts.home, env: opts.env });
+      locators = await adapter.locate({
+        cwd: opts.cwd,
+        home: opts.home,
+        env: opts.env,
+        subagents
+      });
     } catch (err) {
       opts.onError?.(`${adapter.id} locate failed: ${err.message}`);
       continue;
     }
     for (const loc of locators) {
       try {
-        const r = await compileLocator(adapter, loc, opts.storeDir, opts.home);
+        const r = await compileLocator(adapter, loc, opts.storeDir, opts.home, subagents);
         if (r) results.push(r);
       } catch (err) {
         opts.onError?.(`${adapter.id} parse failed for ${loc}: ${err.message}`);
@@ -1358,6 +1415,9 @@ async function runInstall(args) {
 
 // src/cli.ts
 var HOME = process.env.HOME || process.env.USERPROFILE || "";
+function parseSubagentMode(v) {
+  return v === "off" || v === "full" ? v : "calls";
+}
 async function readStdin() {
   if (process.stdin.isTTY) return "";
   const chunks = [];
@@ -1430,12 +1490,14 @@ async function cmdScan(args) {
   const projectDir = flagValue(args, "--cwd") || process.cwd();
   const storeDir = flagValue(args, "--store") || projectDir;
   const only = multiFlag(args, "--agent");
+  const subagents = parseSubagentMode(flagValue(args, "--subagents"));
   const results = await scanAndCompile({
     cwd: projectDir,
     storeDir,
     home: HOME,
     env: process.env,
     agents: only,
+    subagents,
     onError: (msg) => process.stderr.write(`agent-recall: ${msg}
 `)
   });
@@ -1454,6 +1516,8 @@ async function cmdRead(args) {
   const sessionFilter = flagValue(args, "--session");
   const roleFilter = flagValue(args, "--role");
   const agentFilter = flagValue(args, "--agent");
+  const topLevel = args.includes("--top-level");
+  const subagentOf = flagValue(args, "--subagent-of");
   const jsonOut = args.includes("--json");
   const { index } = storePaths(projectDir);
   const matched = [];
@@ -1471,6 +1535,8 @@ async function cmdRead(args) {
       if (sessionFilter && o["session"] !== sessionFilter) continue;
       if (roleFilter && o["role"] !== roleFilter) continue;
       if (agentFilter && o["agent"] !== agentFilter) continue;
+      if (topLevel && o["origin"] === "subagent") continue;
+      if (subagentOf && o["subagent_of"] !== subagentOf) continue;
       matched.push(o);
     }
   } catch {
@@ -1512,8 +1578,9 @@ function usage() {
       "",
       "Usage:",
       "  agent-recall sync --from-hook          compile the transcript named on a hook's stdin JSON",
-      "  agent-recall sync --scan [--cwd DIR] [--store DIR] [--agent ID ...]   find & compile a project's transcripts",
-      "  agent-recall read [--grep S] [--session ID] [--role R] [--agent ID] [--last N] [--offset M] [--json]",
+      "  agent-recall sync --scan [--cwd DIR] [--store DIR] [--agent ID ...] [--subagents off|calls|full]",
+      "                                        find & compile a project's transcripts (subagents default: calls)",
+      "  agent-recall read [--grep S] [--session ID] [--role R] [--agent ID] [--top-level] [--subagent-of ID] [--last N] [--offset M] [--json]",
       "                                        search & page the index (token-lean; never loads it all)",
       "  agent-recall install [--agent ID ...] [--cwd DIR] [--no-backfill]   wire hooks + read layer + backfill",
       "",

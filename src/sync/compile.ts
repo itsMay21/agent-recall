@@ -28,6 +28,9 @@ export interface CompileOptions {
   fallbackTs: string;
   /** Absolute home dir; its occurrences are rewritten to "~" in human-visible strings. Default "". */
   home?: string;
+  /** when true, write only the raw sidecar (drill-down), not the committable index. Used for
+   * sub-agent streams in "calls" mode — the parent's spawn call+output are already in the index. */
+  rawOnly?: boolean;
 }
 
 export interface CompileResult {
@@ -74,6 +77,9 @@ function buildLines(
     role: ev.role,
     ...(parsed.cwd ? { cwd: parsed.cwd } : {}),
     ...(parsed.gitBranch ? { git_branch: parsed.gitBranch } : {}),
+    ...(parsed.origin ? { origin: parsed.origin } : {}),
+    ...(parsed.subagentOf ? { subagent_of: parsed.subagentOf } : {}),
+    ...(parsed.subagentKind ? { subagent_kind: parsed.subagentKind } : {}),
     ...(ev.name ? { name: ev.name } : {}),
     ...(ev.status ? { status: ev.status } : {}),
     ...(preview ? { preview } : {}),
@@ -124,14 +130,18 @@ export async function compileSession(
   const lock = await acquireLock(paths.root);
   try {
     const rawCount = await countLines(rawEventsFile);
-    const idxCount = await countSessionIndexRows(paths.index, parsed.agent, parsed.session);
+    const rawOnly = opts.rawOnly === true;
 
-    // Reconcile a torn previous write: raw has more rows than the index for this session.
+    // Reconcile a torn previous write: raw has more rows than the index for this session. Skipped in
+    // rawOnly mode (there are, by design, no index rows for this session to reconcile).
     let reconciled = 0;
-    if (idxCount < rawCount) {
-      const missing = await readRawRange(rawEventsFile, idxCount, rawCount);
-      await appendJsonl(paths.index, missing.map(rawToIndex));
-      reconciled = missing.length;
+    if (!rawOnly) {
+      const idxCount = await countSessionIndexRows(paths.index, parsed.agent, parsed.session);
+      if (idxCount < rawCount) {
+        const missing = await readRawRange(rawEventsFile, idxCount, rawCount);
+        await appendJsonl(paths.index, missing.map(rawToIndex));
+        reconciled = missing.length;
+      }
     }
 
     const total = parsed.events.length;
@@ -160,14 +170,14 @@ export async function compileSession(
       redacted += built.redacted;
     }
 
-    // Raw first (superset, so a tear is recoverable via reconcile), then index.
+    // Raw first (superset, so a tear is recoverable via reconcile), then index (unless rawOnly).
     await appendJsonl(rawEventsFile, rawRows);
-    await appendJsonl(paths.index, indexRows);
+    if (!rawOnly) await appendJsonl(paths.index, indexRows);
 
     return {
       agent: parsed.agent,
       session: parsed.session,
-      added: indexRows.length,
+      added: rawRows.length,
       skipped: rawCount,
       redacted,
       reconciled,

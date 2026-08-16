@@ -58,6 +58,21 @@ where it did not.
   duplicate turns already present). Covered by unit tests for Codex and Pi. Claude and Hermes emit no
   separate summary row (Hermes `compacted=1` rows are retained originals), so nothing is lost there.
 
+### Sub-agents (ADR-007)
+
+Verified on real Claude sub-agent sidechains from this project's own session
+(`~/.claude/projects/-Users-yakman-Projects-agent-recall/<session>/subagents/agent-*.jsonl`, 4 files):
+
+- `--subagents full` → **315** `origin:"subagent"` index rows, all linked to the parent session
+  `36b01876-…` via `subagent_of`.
+- `--subagents calls` (default) → **0** sub-agent rows in the index, but the full sub-agent threads
+  are written to `raw/` (5 raw dirs) for drill-down; the parent's spawn call+output remain indexed.
+- `read --top-level` correctly excludes sub-agent rows.
+
+Codex fork tagging (`thread_source:"subagent"`, `parent_thread_id`, `source.subagent.other`) is unit-
+tested against a synthetic rollout; Pi (`subagent-artifacts/`) and Cursor are deferred (ADR-007).
+Covered by `test/subagents.test.ts` (4 tests).
+
 ### Not yet tested against a live install
 
 - **Cursor:** no `~/.cursor` on the build machine (IDE-only usage stores under `~/Library`). The

@@ -15,9 +15,13 @@ import { storePaths } from "./sync/store.js";
 import { compileLocator, scanAndCompile } from "./sync/scan.js";
 import { adapterForPath, adapterById } from "./adapters/registry.js";
 import { runInstall } from "./install/installer.js";
-import { AGENT_IDS, type AgentId } from "./sync/types.js";
+import { AGENT_IDS, type AgentId, type SubagentMode } from "./sync/types.js";
 
 const HOME = process.env.HOME || process.env.USERPROFILE || "";
+
+function parseSubagentMode(v: string | undefined): SubagentMode {
+  return v === "off" || v === "full" ? v : "calls";
+}
 
 async function readStdin(): Promise<string> {
   if (process.stdin.isTTY) return "";
@@ -101,6 +105,7 @@ async function cmdScan(args: string[]): Promise<void> {
   // --store lets the store live somewhere other than the scanned project (centralized store, or tests).
   const storeDir = flagValue(args, "--store") || projectDir;
   const only = multiFlag(args, "--agent") as AgentId[];
+  const subagents = parseSubagentMode(flagValue(args, "--subagents"));
 
   const results = await scanAndCompile({
     cwd: projectDir,
@@ -108,6 +113,7 @@ async function cmdScan(args: string[]): Promise<void> {
     home: HOME,
     env: process.env,
     agents: only,
+    subagents,
     onError: (msg) => process.stderr.write(`agent-recall: ${msg}\n`),
   });
   process.stdout.write(
@@ -127,6 +133,8 @@ async function cmdRead(args: string[]): Promise<void> {
   const sessionFilter = flagValue(args, "--session");
   const roleFilter = flagValue(args, "--role");
   const agentFilter = flagValue(args, "--agent");
+  const topLevel = args.includes("--top-level");
+  const subagentOf = flagValue(args, "--subagent-of");
   const jsonOut = args.includes("--json");
   const { index } = storePaths(projectDir);
 
@@ -145,6 +153,8 @@ async function cmdRead(args: string[]): Promise<void> {
       if (sessionFilter && o["session"] !== sessionFilter) continue;
       if (roleFilter && o["role"] !== roleFilter) continue;
       if (agentFilter && o["agent"] !== agentFilter) continue;
+      if (topLevel && o["origin"] === "subagent") continue;
+      if (subagentOf && o["subagent_of"] !== subagentOf) continue;
       matched.push(o);
     }
   } catch {
@@ -188,8 +198,9 @@ function usage(): void {
       "",
       "Usage:",
       "  agent-recall sync --from-hook          compile the transcript named on a hook's stdin JSON",
-      "  agent-recall sync --scan [--cwd DIR] [--store DIR] [--agent ID ...]   find & compile a project's transcripts",
-      "  agent-recall read [--grep S] [--session ID] [--role R] [--agent ID] [--last N] [--offset M] [--json]",
+      "  agent-recall sync --scan [--cwd DIR] [--store DIR] [--agent ID ...] [--subagents off|calls|full]",
+      "                                        find & compile a project's transcripts (subagents default: calls)",
+      "  agent-recall read [--grep S] [--session ID] [--role R] [--agent ID] [--top-level] [--subagent-of ID] [--last N] [--offset M] [--json]",
       "                                        search & page the index (token-lean; never loads it all)",
       "  agent-recall install [--agent ID ...] [--cwd DIR] [--no-backfill]   wire hooks + read layer + backfill",
       "",
