@@ -23,3 +23,5 @@ jobs:
       - run: npm run test
       - run: npm run build
       - run: npm run build:plugin
+      # Fail if the committed plugin bundle is stale vs a fresh build (F-2.11).
+      - run: git diff --exit-code -- plugin/
