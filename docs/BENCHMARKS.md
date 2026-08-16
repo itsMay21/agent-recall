@@ -37,12 +37,13 @@ formats (JSONL, date-partitioned rollouts, and a 610 MB SQLite DB) into one inte
 The point isn't just speed — it's giving the _next_ agent the right amount of prior context:
 
 - Dumping a previous agent's full raw history into the next one is measurably **worse than starting
-  fresh** (Apple SSPM: 71% task completion on full history vs 79% with no memory vs **96%** with a
-  selective index). agent-recall ships the selective middle path — a compact, redacted index — and
-  keeps the raw available for on-demand drill-down.
-- Having an LLM summarize the store on the way in is **also** a regression (ACE: one monolithic rewrite
-  dropped accuracy below the no-adaptation baseline). So the compile path stays mechanical — no model,
-  ever.
+  fresh** (Apple SSPM, Pedada et al. [arXiv:2607.09493](https://arxiv.org/abs/2607.09493): 71% task
+  completion on full history vs 79% with no memory vs **96%** with a selective index). agent-recall
+  ships the selective middle path — a compact, redacted index — and keeps the raw available for
+  on-demand drill-down.
+- Having an LLM summarize the store on the way in is a poor fix too: ACE (Zhang et al.,
+  [arXiv:2510.04618](https://arxiv.org/abs/2510.04618)) shows a monolithic rewrite can collapse useful
+  context. So the compile path stays mechanical — no model, ever.
 
 The result: one command, sub-second per session, produces a redacted, jq-valid, searchable log that
 any later agent (Claude, Codex, Cursor, Hermes, Pi) reads with `grep`/`Read` before it starts — so it
@@ -51,7 +52,7 @@ doesn't re-propose a rejected design or re-walk a dead path.
 ## Reproduce
 
 ```bash
-npm run check                 # 41 tests incl. redaction canaries + strict-JSON round-trip
+npm run check                 # 48 tests incl. redaction canaries + strict-JSON round-trip
 node dist/cli.js sync --scan --cwd /path/to/project --store /tmp/ar-demo
 node dist/cli.js read --grep <topic> --last 20 --cwd /tmp/ar-demo   # token-lean, filtered
 ```

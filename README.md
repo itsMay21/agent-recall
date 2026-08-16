@@ -14,7 +14,7 @@ re-walk a dead path.
 
 Every coding agent stores its sessions in its own format, in its own home-directory location, and none
 of them can see what the others did in your project. Dumping a previous agent's full raw history into
-the next one is measurably _worse than starting fresh_ (Apple SSPM: 71% full-history vs 79% no-memory
+the next one is measurably _worse than starting fresh_ (Apple SSPM, [arXiv:2607.09493](https://arxiv.org/abs/2607.09493): 71% full-history vs 79% no-memory
 vs 96% selective). agent-recall keeps the raw safe and gives the next agent a compact, redacted index —
 the selective middle path — plus a skill that teaches it to treat history as evidence, not orders.
 
@@ -33,37 +33,68 @@ The **write** side is one tiny headless command that each agent's session-close 
 
 ## Supported agents (tier-1)
 
-| Agent       | Ingest     | Close trigger       | Read layer                       |
-| ----------- | ---------- | ------------------- | -------------------------------- |
-| Claude Code | ✅         | `SessionEnd` hook   | `CLAUDE.md`→`@AGENTS.md` + skill |
-| Codex       | ✅         | `SessionEnd` hook   | native `AGENTS.md` + skill       |
-| Cursor      | ✅ (lossy) | `sessionEnd`/`stop` | native `AGENTS.md` + skill       |
-| Hermes      | ✅         | `on_session_end`    | native `AGENTS.md` + skill       |
-| Pi          | ✅         | sync-on-start       | native `AGENTS.md` + skill       |
+| Agent       | Ingest                  | Close trigger       | Read layer                       |
+| ----------- | ----------------------- | ------------------- | -------------------------------- |
+| Claude Code | ✅                      | `SessionEnd` hook   | `CLAUDE.md`→`@AGENTS.md` + skill |
+| Codex       | ✅                      | `SessionEnd` hook   | native `AGENTS.md` + skill       |
+| Hermes      | ✅                      | `on_session_end`    | native `AGENTS.md` + skill       |
+| Pi          | ✅                      | sync-on-start       | native `AGENTS.md` + skill       |
+| Cursor      | ⚠️ experimental (lossy) | `sessionEnd`/`stop` | native `AGENTS.md` + skill       |
 
-Gemini CLI, OpenCode, Goose, Cline, Amp, and others are documented as tier-2 in
-[`docs/CONSUMPTION.md`](docs/CONSUMPTION.md).
+Cursor is experimental — the adapter is written to the documented `agent-transcripts` schema but not
+yet validated against a live `~/.cursor` store. Gemini CLI, OpenCode, Goose, Cline, Amp, and others are
+documented as tier-2 in [`docs/CONSUMPTION.md`](docs/CONSUMPTION.md).
 
-## Install (preview)
+## What it is not
+
+| Not…                   | Because                                                                                |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| an MCP memory server   | No runtime process; it writes a file on session close. Agents `Read` it directly.      |
+| cross-vendor resume    | Tool trees don't survive translation — you get the _record_, not a replayable session. |
+| an LLM memory gardener | No model in the compile path. Nothing is summarized, ranked, or invented.              |
+
+## Install
+
+**Claude Code (plugin) — no PATH, no npm:**
 
 ```bash
-# In your project:
-npx agent-recall install --agent claude-code codex cursor hermes pi
+claude plugin marketplace add itsMay21/agent-recall   # requires the repo to be public
+claude plugin install agent-recall@agent-recall
 ```
 
-This writes the session-close hook config, an `AGENTS.md` pointer (and `CLAUDE.md` shim), and the
-`read-sessions` skill for each named agent. Claude users can instead install the bundled plugin.
+The plugin's `SessionEnd` hook runs the bundled binary directly (`node "${CLAUDE_PLUGIN_ROOT}/bin/cli.js"`).
+
+**Everyone else (npm):** install the CLI locally, then wire it into the project.
+
+```bash
+npm i -D agent-recall
+npx agent-recall install --agent claude-code codex hermes pi   # (cursor is experimental)
+```
+
+`install` writes the session-close hook config, an `AGENTS.md` pointer (and `CLAUDE.md` shim), the
+`read-sessions` skill, and backfills existing sessions. The installed hooks call
+`npx --no-install agent-recall …`, which resolves the local (or global) binary — so **the `npm i -D`
+step is required** for hooks to run on close. See [`docs/CONSUMPTION.md`](docs/CONSUMPTION.md).
 
 ## Privacy
 
 Raw vendor transcripts contain plaintext secrets. agent-recall **never commits raw**
-(`.agent-recall/raw/` is gitignored) and redacts every field — including tool args and stdout — before
-it reaches the index. See [`docs/CHARTER.md`](docs/CHARTER.md) §5.
+(`.agent-recall/raw/` is gitignored) and redacts every field — tool args and stdout included — before it
+reaches the index, and rewrites your home dir to `~` in previews. **The `cwd` field keeps the absolute
+project path**, so review an index before committing it to a _public_ repo. Redaction is pattern-based,
+not exhaustive — see [`SECURITY.md`](SECURITY.md) and [`docs/CHARTER.md`](docs/CHARTER.md) §5.
+
+## Docs
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — the three layers · [`docs/SCHEMA.md`](docs/SCHEMA.md) — the index line
+- [`docs/DECISIONS.md`](docs/DECISIONS.md) — ADRs · [`docs/CHARTER.md`](docs/CHARTER.md) — non-negotiables
+- [`docs/CONSUMPTION.md`](docs/CONSUMPTION.md) — how each agent installs · [`docs/TESTING.md`](docs/TESTING.md) / [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) — evidence
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) · [`SECURITY.md`](SECURITY.md) · [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Status
 
-Early. Under active construction. See [`docs/DECISIONS.md`](docs/DECISIONS.md) for what's settled and
-[`docs/TESTING.md`](docs/TESTING.md) for real-session evidence.
+Early (v0.1). The compile engine is well-tested (48 tests, verified on real Claude/Codex/Hermes/Pi
+sessions); Cursor is experimental. See [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 ## License
 

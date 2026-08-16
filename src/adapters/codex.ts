@@ -200,9 +200,12 @@ export const codexAdapter: Adapter = {
     }
 
     if (events.length === 0) return null;
+    const ownId = session ?? fileStem(file);
+    // Namespace a fork as <parent>/<id> to match SCHEMA (C-14), when the parent is known.
+    const sessionId = isSub && subagentOf ? `${subagentOf}/${ownId}` : ownId;
     return {
       agent: "codex",
-      session: session ?? fileStem(file),
+      session: sessionId,
       ...(cwd ? { cwd } : {}),
       ...(isSub ? { origin: "subagent" as const } : {}),
       ...(subagentOf ? { subagentOf } : {}),

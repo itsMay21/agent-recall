@@ -5,6 +5,22 @@ All notable changes to agent-recall are documented here. Format loosely follows
 
 ## [Unreleased]
 
+### Fixed (HEAD audit `archive/AUDIT-2026-08-16-initial.md` successor)
+
+- **C-1**: session-close hooks now use the same `calls` sub-agent default as `sync --scan` — a
+  sub-agent transcript handed to a hook is kept raw-only, never dumped into the committable index.
+- **C-2**: `-h`/`--help` on any verb prints usage and never runs it (`install --help` no longer installs).
+- **C-3**: installed hooks call `npx --no-install agent-recall …` so they resolve after `npm i -D`.
+- **C-4**: CLI reports `indexed N … M sub-agent event(s) kept raw-only` instead of over-counting.
+- **C-9**: `matchPath` honors `CLAUDE_CONFIG_DIR` / `HERMES_DIR`. **C-10**: `install --agent hermes`
+  mirrors the skill into `~/.hermes/skills/`. **C-14**: Codex forks namespaced `<parent>/<id>`.
+  **C-15**: Hermes tool rows no longer assert a fictional `status:"ok"`. **C-11**: Cursor slug match
+  is boundary-safe and labeled experimental.
+- **Docs truth**: COMPILE-SPEC demoted + banner-corrected (Codex `response_item` canonical, `.agent-recall/`
+  names, `calls` default); test counts → 48; removed phantom `indexWriter.ts`/empty-fixtures claims;
+  `ts_source`/image-envelope/idempotency schema fixed; SECURITY contact fixed; Apple/ACE cites sourced;
+  stale root audit archived; personal paths scrubbed; README install (npm + plugin) + privacy + docs links.
+
 ### Added
 
 - **Setup backfill**: `install` loads pre-existing sessions once (shared `scanAndCompile`), so history

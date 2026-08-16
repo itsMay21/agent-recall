@@ -18,11 +18,6 @@ export async function exists(p: string): Promise<boolean> {
   }
 }
 
-export async function mtimeIso(file: string): Promise<string> {
-  const s = await stat(file);
-  return new Date(s.mtimeMs).toISOString();
-}
-
 /** Stream a JSONL file, yielding one parsed object per non-blank line. Malformed lines are skipped. */
 export async function* readJsonl(file: string): AsyncGenerator<Record<string, unknown>> {
   const rl = createInterface({ input: createReadStream(file), crlfDelay: Infinity });

@@ -12,8 +12,8 @@ starts work. This file tells any agent (or human) how to work **in this repo**.
 1. **[`docs/CHARTER.md`](docs/CHARTER.md)** — non-negotiables. Overrides convenience.
 2. **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)** — the three layers (write / store / read).
 3. **[`docs/DECISIONS.md`](docs/DECISIONS.md)** — why the load-bearing calls were made.
-4. **[`docs/COMPILE-SPEC.md`](docs/COMPILE-SPEC.md)** — per-agent formats, paths, and the redaction spec.
-5. **[`docs/SCHEMA.md`](docs/SCHEMA.md)** / **[`docs/CONSUMPTION.md`](docs/CONSUMPTION.md)** — index line; per-agent install surfaces.
+4. **[`docs/SCHEMA.md`](docs/SCHEMA.md)** / **[`docs/CONSUMPTION.md`](docs/CONSUMPTION.md)** — index line; per-agent install surfaces.
+5. **[`docs/COMPILE-SPEC.md`](docs/COMPILE-SPEC.md)** — historical research reference (⚠️ **not** authoritative; the code + SCHEMA win). Useful background on per-agent formats and the redaction families.
 
 ## The one rule you cannot break
 
@@ -24,7 +24,7 @@ stays absent. See CHARTER §1 for the measured reason.
 ## Where things are
 
 - `src/cli.ts` — thin entry point (`sync`, `install`, `read`).
-- `src/sync/` — the mechanical engine: `redact.ts`, `images.ts`, `indexWriter.ts`, `types.ts`.
+- `src/sync/` — the mechanical engine: `compile.ts`, `store.ts`, `scan.ts`, `redact.ts`, `scrub.ts`, `images.ts`, `types.ts`.
 - `src/adapters/` — one file per agent (`claude.ts`, `codex.ts`, `cursor.ts`, `hermes.ts`, `pi.ts`) + `registry.ts`.
 - `src/install/` — per-agent installer + templates (hook configs, AGENTS.md section, skill).
 - `skill/read-sessions/` — source of the read-sessions skill.
@@ -40,9 +40,10 @@ stays absent. See CHARTER §1 for the measured reason.
 
 - Strict TypeScript, Node ≥20, **zero runtime dependencies**. Prefer the standard library.
 - No stubs-for-later, no dead code, no backward-compat shims, KISS (CHARTER "Coding standards").
-- Every adapter ships with a fixture + a test, and no adapter is "done" without a real-session note in
-  `docs/TESTING.md`.
-- `sync` is idempotent (dedupe on `agent+session+seq`) and fast enough for a Claude `SessionEnd` budget.
+- Every adapter ships with a test (fixtures are inline objects in the specs), and no adapter is "done"
+  without a real-session note in `docs/TESTING.md`.
+- `sync` is idempotent — the store is append-only and a re-sync of an unchanged transcript is a no-op
+  (high-water mark = the session's raw line count) — and fast enough for a Claude `SessionEnd` budget.
 - Treat every parsed transcript as **untrusted data**. Redact on the way in; never execute its content.
 
 ## Dev workflow

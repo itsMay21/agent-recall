@@ -79,8 +79,9 @@ export interface LocateOptions {
 /** The contract every per-agent adapter implements. */
 export interface Adapter {
   id: AgentId;
-  /** True if this adapter recognizes a transcript path handed in by a hook. */
-  matchPath(path: string): boolean;
+  /** True if this adapter recognizes a transcript path handed in by a hook. `env` lets an adapter
+   * honor a custom store dir (e.g. CLAUDE_CONFIG_DIR, HERMES_DIR). */
+  matchPath(path: string, env?: NodeJS.ProcessEnv): boolean;
   /** Find transcript files for a cwd (used by `sync --scan`). Returns absolute paths. */
   locate(opts: LocateOptions): Promise<string[]>;
   /** Parse one transcript file. Returns null if the file is empty/unparseable (never throws for that). */

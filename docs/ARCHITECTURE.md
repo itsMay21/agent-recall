@@ -74,8 +74,9 @@ A thin command with a small verb set:
   **not** need this; they read the file directly.
 
 Internals (see `COMPILE-SPEC.md` for the field-level spec):
-`adapter.locate()` → `adapter.parse()` → `redact()` (regex families) → `stripImages()` (hash+envelope)
-→ `indexWriter.append()` (idempotent) + `raw/` copy.
+`adapter.locate()` → `adapter.parse()` → `compileSession()` orchestrates `redactString`/`redactDeep`
+(regex families) → `scrub` (home paths + JSON-safe surrogates) → `toEnvelopes()` (image hash+envelope)
+→ `appendJsonl()` to `index.jsonl` (idempotent, under a store lock) + the `raw/` sidecar.
 
 ### 3.2 STORE — `.agent-recall/`
 
@@ -83,7 +84,7 @@ Internals (see `COMPILE-SPEC.md` for the field-level spec):
 .agent-recall/
   index.jsonl                 # one event per line, redacted, committable
   raw/<agent>/<session>/      # gitignored
-    source                    # verbatim vendor copy (may hold pre-redaction bytes)
+    source-<basename>         # verbatim vendor copy (may hold pre-redaction bytes)
     events.jsonl              # sanitized typed fields
   README.md                   # one screen for humans (written by `install`)
 ```

@@ -232,7 +232,15 @@ export async function runInstall(args: string[]): Promise<void> {
       case "cursor":
         await installCursorHook(projectDir);
         break;
-      case "hermes":
+      case "hermes": {
+        // Hermes discovers skills from ~/.hermes/skills/ — mirror the read-sessions skill there so a
+        // Hermes session actually gets the walk, not just the AGENTS.md pointer (C-10 / ADR-005).
+        const hermesDir = process.env.HERMES_DIR || join(process.env.HOME || "", ".hermes");
+        try {
+          await installSkill(join(hermesDir, "skills"));
+        } catch {
+          log(`could not write ${hermesDir}/skills (Hermes not installed?); skipping skill mirror`);
+        }
         log(
           "Hermes: session-end hooks are user-level and need your consent. Add to ~/.hermes/config.yaml:",
         );
@@ -240,6 +248,7 @@ export async function runInstall(args: string[]): Promise<void> {
           `  hooks: { on_session_end: "${HOOK_CMD}" }   then run: hermes hooks list  (approve in ~/.hermes/shell-hooks-allowlist.json)`,
         );
         break;
+      }
       case "pi":
         log(
           "Pi has no session-end event. Run `agent-recall sync --scan` at session start, or add a Pi",

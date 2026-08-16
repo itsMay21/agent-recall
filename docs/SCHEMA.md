@@ -38,7 +38,7 @@ ever written by a model — every value is copied from the native transcript or 
 | `status`     | `ok` \| `error`                                                      | no       | Tool outcome copied from the native record. Only `ok`/`error` are produced today; `rejected`/`superseded` are reserved in the type but have no mechanical producer yet, so consumers should not rely on them (F-1.4). |
 | `preview`    | string                                                               | no       | A truncated (≤ 200 char) copy of a native text field — first line of the prompt, the command string, etc. **Truncation only; never a summary.** Redacted.                                                             |
 | `raw`        | string                                                               | no       | Pointer into the gitignored raw copy: `raw/<agent>/<session>/events.jsonl#<seq>`.                                                                                                                                     |
-| `ts_source`  | `native` \| `mtime`                                                  | no       | Present and `mtime` only when `ts` was derived from file modification time because the record had no timestamp.                                                                                                       |
+| `ts_source`  | `mtime`                                                              | no       | Present (value `mtime`) only when `ts` was derived from file mtime because the record had no native timestamp; omitted otherwise.                                                                                     |
 | `redacted`   | number                                                               | no       | Count of spans redacted in this line's fields. Present only when > 0. Lets a reader know a value was scrubbed.                                                                                                        |
 
 ## Sub-agent fields (optional)
@@ -64,10 +64,11 @@ already in the index); `full` also indexes the sub-agent stream (tagged as above
 - **`preview` is truncation, not summarization.** Take the native string, cut to ≤200 chars, redact.
 - **`status` is evidence-only.** Copied from the native record; today only `ok`/`error` are emitted.
 - **Images/binaries never inline.** They are replaced by an envelope in `raw/events.jsonl`
-  (`{kind:"image", content_type, bytes, sha256, raw}`) and do not produce an index line of their own
+  (`{kind:"image", content_type, bytes, sha256}`) and do not produce an index line of their own
   unless they were their own turn; the index carries only the envelope's existence, never base64.
-- **Idempotency key:** `(agent, session, seq)`. Re-running `sync` over an unchanged transcript appends
-  nothing new.
+- **Idempotency:** `(agent, session, seq)` identifies a row; in practice the compiler uses the
+  session's raw line count as the high-water mark (equivalent for append-only sources). Re-running
+  `sync` over an unchanged transcript appends nothing new.
 - **Compaction is captured, not expanded.** When a harness compacts context, the original turns stay in
   the append-only transcript (we keep them all — the "uncompacted history"). The compaction record
   itself becomes a `role:"event"` line with `native_type:"compaction"` whose `preview`/`text` is the

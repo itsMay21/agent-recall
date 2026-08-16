@@ -77,7 +77,7 @@ async function cmdSyncFromHook(): Promise<void> {
 
   // Path-bearing hooks (Claude/Codex/Cursor): pick the adapter by the transcript path.
   if (path) {
-    const adapter = adapterForPath(path);
+    const adapter = adapterForPath(path, process.env);
     if (!adapter) {
       process.stderr.write(`agent-recall: no adapter recognizes ${path}\n`);
       return;

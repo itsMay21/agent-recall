@@ -26,8 +26,9 @@ transcript to git.
 If you find a way to make agent-recall leak a secret into the index, execute transcript content, or
 corrupt the store, please report it privately:
 
-- Open a **GitHub Security Advisory** (Security → Advisories → Report a vulnerability) on this repo, or
-- email the maintainer (see `package.json` author) with `agent-recall security` in the subject.
+- Open a **GitHub Security Advisory** (Security → Advisories → Report a vulnerability) on this repo
+  (preferred), or
+- contact the maintainer [@itsMay21](https://github.com/itsMay21) on GitHub.
 
 Please include a minimal reproduction (a synthetic, non-real secret shape is fine — do **not** send
 real credentials). We aim to acknowledge within a few days. Do not open a public issue for a

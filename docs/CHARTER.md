@@ -17,9 +17,10 @@ It is **not** a cross-vendor _resume_ tool, a cloud service, a TUI, or an LLM "m
 
 1. **Compile is mechanical. No LLM in the compile path.** Parse → redact → index. If a field is
    absent in the native store, it stays absent. Never infer a tool name, argument, decision, or
-   summary from prose. (Evidence: Apple SSPM measured full-history dumps _worse than amnesia_
-   — 71% vs 79% no-memory vs 96% selective; ACE showed one LLM rewrite of a store dropped accuracy
-   below the no-adaptation baseline. A model in the compile path is a measured regression, not a feature.)
+   summary from prose. (Evidence: Apple's SSPM (Pedada et al., arXiv:2607.09493) measured full-history
+   dumps _worse than amnesia_ — 71% task completion vs 79% no-memory vs 96% selective; ACE (Zhang et
+   al., arXiv:2510.04618) shows a monolithic rewrite can collapse useful context. A model in the compile
+   path is a measured regression, not a feature.)
 
 2. **The next agent does not load raw traces by default.** The default read is the _index_ (who,
    when, goal, tool _names_, status, pointer). Tool args and stdout stay in `raw/`, opened only on
@@ -50,11 +51,11 @@ It is **not** a cross-vendor _resume_ tool, a cloud service, a TUI, or an LLM "m
   installed to _read_ the store. Dev-time tooling (bundler, test runner) is fine.
 - **Investigate before asking.** Anything discoverable in under a minute is research, not a question.
   For anything touching redaction, privacy, or a destructive/outward action, confirm the big call.
-- **Idempotent and fast.** `sync` must be safe to run repeatedly (dedupe on `agent + session +
-native-line-id`) and fast enough for a Claude `SessionEnd` budget (~1.5–60s) — parse one
-  transcript, not the world; detach if heavier.
-- **Every change passes the gate:** `format`, `typecheck`, `test`, `build`. Adapters ship with a
-  fixture and a test. No adapter is "done" without a real-session evidence note in `TESTING.md`.
+- **Idempotent and fast.** `sync` must be safe to run repeatedly — the store is append-only and the
+  high-water mark is the session's raw line count, so re-syncing an unchanged transcript is a no-op —
+  and fast enough for a Claude `SessionEnd` budget (~1.5–60s): parse one transcript, not the world.
+- **Every change passes the gate:** `format`, `typecheck`, `test`, `build`. Adapters ship with a test
+  (fixtures inline in the spec). No adapter is "done" without a real-session evidence note in `TESTING.md`.
 
 ## Privacy default
 

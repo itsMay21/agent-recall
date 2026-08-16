@@ -21,8 +21,8 @@ CI (`.github/workflows/ci.yml`) runs the same on Node 20 and 22.
 Adapters live in `src/adapters/<agent>.ts` and implement the `Adapter` contract
 (`src/sync/types.ts`). An adapter is **not "done"** until:
 
-1. It ships a fixture under `test/fixtures/` (redacted) **and** a parse/locate test in
-   `test/adapters.test.ts`.
+1. It ships a parse/locate test in `test/adapters.test.ts` (fixtures are inline objects in the spec;
+   never commit a real transcript).
 2. It copies only typed native fields — never invents a tool name, argument, or status from prose.
    If a field is absent natively, it stays absent.
 3. It has a real-session evidence note in [`docs/TESTING.md`](docs/TESTING.md) (counts, timing, and

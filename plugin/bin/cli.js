@@ -513,9 +513,14 @@ function blocksToEvents(role, content, ts) {
 }
 var claudeAdapter = {
   id: "claude-code",
-  matchPath(path) {
+  matchPath(path, env) {
     const p = path.replaceAll("\\", "/");
-    return p.endsWith(".jsonl") && (p.includes("/.claude/projects/") || p.includes("/.claude/transcripts/"));
+    if (!p.endsWith(".jsonl")) return false;
+    if (p.includes("/.claude/projects/") || p.includes("/.claude/transcripts/")) return true;
+    const cfg = env?.CLAUDE_CONFIG_DIR?.replaceAll("\\", "/");
+    return Boolean(
+      cfg && (p.startsWith(`${cfg}/projects/`) || p.startsWith(`${cfg}/transcripts/`))
+    );
   },
   async locate(opts) {
     const root = claudeRoot(opts.env);
@@ -734,9 +739,11 @@ var codexAdapter = {
       }
     }
     if (events.length === 0) return null;
+    const ownId = session ?? fileStem(file);
+    const sessionId = isSub && subagentOf ? `${subagentOf}/${ownId}` : ownId;
     return {
       agent: "codex",
-      session: session ?? fileStem(file),
+      session: sessionId,
       ...cwd ? { cwd } : {},
       ...isSub ? { origin: "subagent" } : {},
       ...subagentOf ? { subagentOf } : {},
@@ -798,7 +805,7 @@ var cursorAdapter = {
     }
     for (const e of entries) {
       if (!e.isDirectory()) continue;
-      if (e.name === slug || e.name.endsWith(slug)) {
+      if (e.name === slug || e.name.endsWith(`-${slug}`)) {
         out.push(...await transcriptsUnder(join5(projects, e.name, "agent-transcripts")));
       }
     }
@@ -895,9 +902,11 @@ function toolCallsToEvents(raw, ts) {
 }
 var hermesAdapter = {
   id: "hermes",
-  matchPath(path) {
+  matchPath(path, env) {
     const p = path.replaceAll("\\", "/");
-    return p.includes("/.hermes/") && p.includes("state.db");
+    if (p.includes("state.db") && p.includes("/.hermes/")) return true;
+    const dir = env?.HERMES_DIR?.replaceAll("\\", "/");
+    return Boolean(dir && p.includes("state.db") && p.startsWith(dir));
   },
   async locate(opts) {
     const dbPath = stateDbPath(opts.env);
@@ -941,10 +950,8 @@ var hermesAdapter = {
           if (text) events.push({ role: "assistant", text, ...withTs });
           events.push(...toolCallsToEvents(m.tool_calls, ts));
         } else if (m.role === "tool") {
-          const status = "ok";
           events.push({
             role: "tool",
-            status,
             ...m.tool_name ? { name: m.tool_name } : {},
             ...contentToText(m.content) ? { text: contentToText(m.content) } : {},
             result: m.content,
@@ -1093,8 +1100,8 @@ var ADAPTERS = [
 function adapterById(id) {
   return ADAPTERS.find((a) => a.id === id);
 }
-function adapterForPath(path) {
-  return ADAPTERS.find((a) => a.matchPath(path));
+function adapterForPath(path, env) {
+  return ADAPTERS.find((a) => a.matchPath(path, env));
 }
 
 // src/sync/scan.ts
@@ -1373,7 +1380,13 @@ async function runInstall(args) {
       case "cursor":
         await installCursorHook(projectDir);
         break;
-      case "hermes":
+      case "hermes": {
+        const hermesDir = process.env.HERMES_DIR || join8(process.env.HOME || "", ".hermes");
+        try {
+          await installSkill(join8(hermesDir, "skills"));
+        } catch {
+          log(`could not write ${hermesDir}/skills (Hermes not installed?); skipping skill mirror`);
+        }
         log(
           "Hermes: session-end hooks are user-level and need your consent. Add to ~/.hermes/config.yaml:"
         );
@@ -1381,6 +1394,7 @@ async function runInstall(args) {
           `  hooks: { on_session_end: "${HOOK_CMD}" }   then run: hermes hooks list  (approve in ~/.hermes/shell-hooks-allowlist.json)`
         );
         break;
+      }
       case "pi":
         log(
           "Pi has no session-end event. Run `agent-recall sync --scan` at session start, or add a Pi"
@@ -1471,7 +1485,7 @@ async function cmdSyncFromHook() {
   const projectDir = input.cwd || process.cwd();
   const path = input.transcript_path;
   if (path) {
-    const adapter = adapterForPath(path);
+    const adapter = adapterForPath(path, process.env);
     if (!adapter) {
       process.stderr.write(`agent-recall: no adapter recognizes ${path}
 `);

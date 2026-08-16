@@ -18,6 +18,6 @@ export function adapterById(id: AgentId): Adapter | undefined {
 }
 
 /** Pick the adapter that recognizes a transcript path handed in by a hook. */
-export function adapterForPath(path: string): Adapter | undefined {
-  return ADAPTERS.find((a) => a.matchPath(path));
+export function adapterForPath(path: string, env?: NodeJS.ProcessEnv): Adapter | undefined {
+  return ADAPTERS.find((a) => a.matchPath(path, env));
 }

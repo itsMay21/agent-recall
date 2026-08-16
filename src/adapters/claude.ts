@@ -104,11 +104,14 @@ function blocksToEvents(
 export const claudeAdapter: Adapter = {
   id: "claude-code",
 
-  matchPath(path: string): boolean {
+  matchPath(path: string, env?: NodeJS.ProcessEnv): boolean {
     const p = path.replaceAll("\\", "/");
-    return (
-      p.endsWith(".jsonl") &&
-      (p.includes("/.claude/projects/") || p.includes("/.claude/transcripts/"))
+    if (!p.endsWith(".jsonl")) return false;
+    if (p.includes("/.claude/projects/") || p.includes("/.claude/transcripts/")) return true;
+    // Honor a custom config dir (C-9): a transcript under CLAUDE_CONFIG_DIR/projects|transcripts.
+    const cfg = env?.CLAUDE_CONFIG_DIR?.replaceAll("\\", "/");
+    return Boolean(
+      cfg && (p.startsWith(`${cfg}/projects/`) || p.startsWith(`${cfg}/transcripts/`)),
     );
   },
 

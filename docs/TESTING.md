@@ -7,30 +7,32 @@ scratch directory (`--store`), never in the source projects.
 
 ## Unit suite (committed, CI-gated)
 
-`npm run test` — **28 tests, all passing**:
+`npm run test` — **48 tests, all passing** across 6 specs (fixtures are inline objects in the specs):
 
 - `test/redact.test.ts` (17) — every secret family (AWS, GitHub PAT/fine/token, OpenAI, Anthropic,
   Google, Slack, Stripe, GitLab, JWT, PEM), assignment-shaped `KEY=value`, credentialed URLs, and the
   guarantee that ordinary prose and non-string scalars pass through untouched.
-- `test/compile.test.ts` (6) — index/raw split (args in raw only), idempotent re-run (adds 0),
-  append-only growth, image→envelope with sha256 (base64 dropped), 200-char preview truncation +
-  `ts_source:"mtime"` fallback, and secret redaction reflected in `redacted` count + scrubbed output.
-- `test/adapters.test.ts` (5) — each adapter against a synthetic fixture: Claude
-  (text/thinking/tool_use/tool_result, metadata skipped), Codex (`response_item` canonical, `event_msg`
-  duplicates skipped, args JSON-parsed), Pi (toolCall/toolResult, `custom` skipped), Cursor (text only,
-  never invents tool names), Hermes (SQLite `sessions`/`messages`, tool_calls parsed, db never copied).
+- `test/audit-fixes.test.ts` (11) — regression canaries for the audit findings (surrogate/JSON safety,
+  multi-word quoted + bare-AWS secrets, home-path scrub, crash-window reconcile, segment collisions).
+- `test/compile.test.ts` (6) — index/raw split (args in raw only), idempotent re-run, append-only
+  growth, image→envelope with sha256 (base64 dropped), preview truncation + `ts_source` fallback.
+- `test/adapters.test.ts` (7) — each adapter against an inline fixture: Claude, Codex (`response_item`
+  canonical, `event_msg` skipped), Pi, Cursor (text only), Hermes (SQLite), plus compaction capture.
+- `test/subagents.test.ts` (4) — Claude sidechain + Codex fork tagging; calls (raw-only) vs full.
+- `test/cli.test.ts` (3) — end-to-end through the real entrypoint: `install --help` writes nothing,
+  unknown command exits 2, a sub-agent transcript from a hook is kept raw-only (no index rows).
 
 ## Real-session runs (2026-08-16, author's machine)
 
 Environment: macOS, Node 22.23, `node:sqlite` available. Scanned each agent's real on-disk store into
 a scratch `.agent-recall/`.
 
-| Agent  | Source                                                | Sessions      | Events | Secret spans redacted |
-| ------ | ----------------------------------------------------- | ------------- | ------ | --------------------- |
-| Claude | `~/.claude/projects/-Users-yakman-Projects-relay-dev` | (with Pi) 9   | 1510   | part of 90            |
-| Pi     | `~/.pi/agent/sessions/--…relay-dev--`                 | (with Claude) | 956    | part of 90            |
-| Codex  | `~/.codex/sessions/**` (cwd = a Codex project)        | 2             | 397    | 9                     |
-| Hermes | `~/.hermes/state.db` (cwd `/Users/yakman`)            | 51            | 24522  | 312                   |
+| Agent  | Source                                             | Sessions      | Events | Secret spans redacted |
+| ------ | -------------------------------------------------- | ------------- | ------ | --------------------- |
+| Claude | `~/.claude/projects/-Users-you-Projects-relay-dev` | (with Pi) 9   | 1510   | part of 90            |
+| Pi     | `~/.pi/agent/sessions/--…relay-dev--`              | (with Claude) | 956    | part of 90            |
+| Codex  | `~/.codex/sessions/**` (cwd = a Codex project)     | 2             | 397    | 9                     |
+| Hermes | `~/.hermes/state.db` (cwd = home)                  | 51            | 24522  | 312                   |
 
 Role distribution was sensible in every case (user / assistant / thinking / tool / event), and tool
 `name`s were captured where the native store had them (Bash, read_file, shell, …) and correctly absent
@@ -61,7 +63,7 @@ where it did not.
 ### Sub-agents (ADR-007)
 
 Verified on real Claude sub-agent sidechains from this project's own session
-(`~/.claude/projects/-Users-yakman-Projects-agent-recall/<session>/subagents/agent-*.jsonl`, 4 files):
+(`~/.claude/projects/-Users-you-Projects-agent-recall/<session>/subagents/agent-*.jsonl`, 4 files):
 
 - `--subagents full` → **315** `origin:"subagent"` index rows, all linked to the parent session
   `36b01876-…` via `subagent_of`.
@@ -82,7 +84,7 @@ Covered by `test/subagents.test.ts` (4 tests).
 ## How to reproduce
 
 ```bash
-npm run check                                  # format + typecheck + 28 tests + build
+npm run check                                  # format + typecheck + 48 tests + build
 npm run build:plugin                           # assemble the self-contained Claude plugin
 # scan your own sessions into a scratch store (never writes into the scanned project):
 node dist/cli.js sync --scan --cwd /path/to/project --store /tmp/ar-demo

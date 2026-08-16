@@ -9,6 +9,10 @@
     "type": "git",
     "url": "https://github.com/itsMay21/agent-recall.git"
   },
+  "homepage": "https://github.com/itsMay21/agent-recall#readme",
+  "bugs": {
+    "url": "https://github.com/itsMay21/agent-recall/issues"
+  },
   "keywords": [
     "coding-agent",
     "claude-code",

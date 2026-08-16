@@ -9,7 +9,7 @@
 import { join } from "node:path";
 import { createRequire } from "node:module";
 import type { DatabaseSync as DatabaseSyncCtor } from "node:sqlite";
-import type { Adapter, LocateOptions, ParsedSession, RawEvent, Status } from "../sync/types.js";
+import type { Adapter, LocateOptions, ParsedSession, RawEvent } from "../sync/types.js";
 import { home, exists, asString, epochToIso, textFromContent } from "./util.js";
 
 // node:sqlite is a newer builtin the bundler doesn't recognize; load it at runtime via createRequire
@@ -111,9 +111,11 @@ function toolCallsToEvents(raw: string | null, ts?: string): RawEvent[] {
 export const hermesAdapter: Adapter = {
   id: "hermes",
 
-  matchPath(path: string): boolean {
+  matchPath(path: string, env?: NodeJS.ProcessEnv): boolean {
     const p = path.replaceAll("\\", "/");
-    return p.includes("/.hermes/") && p.includes("state.db");
+    if (p.includes("state.db") && p.includes("/.hermes/")) return true;
+    const dir = env?.HERMES_DIR?.replaceAll("\\", "/");
+    return Boolean(dir && p.includes("state.db") && p.startsWith(dir));
   },
 
   async locate(opts: LocateOptions): Promise<string[]> {
@@ -172,10 +174,10 @@ export const hermesAdapter: Adapter = {
           if (text) events.push({ role: "assistant", text, ...withTs });
           events.push(...toolCallsToEvents(m.tool_calls, ts));
         } else if (m.role === "tool") {
-          const status: Status = "ok";
+          // Hermes records no per-tool error flag, so we do not assert a status (C-15). Omitting is
+          // charter-correct (absent = not recorded) — better than claiming every tool "ok".
           events.push({
             role: "tool",
-            status,
             ...(m.tool_name ? { name: m.tool_name } : {}),
             ...(contentToText(m.content) ? { text: contentToText(m.content) as string } : {}),
             result: m.content,

@@ -37,6 +37,12 @@ the last agent do," or "why was X rejected."
    type is `compaction` carries the harness's own summary of the turns before it. Treat it as a lossy
    recap, not a source of truth — the original turns are still present earlier in the same session, so
    don't assume the summary is the whole story.
+7. **Sub-agents are usually not in the index.** By default (`calls` mode) a spawned sub-agent's full
+   thread lives only under `.agent-recall/raw/`, not in `index.jsonl` — the parent's spawn call+result
+   are what you see indexed. To read a sub-agent's actual work, look under
+   `.agent-recall/raw/<agent>/<parent-session>-<child>/events.jsonl`. If sessions were compiled with
+   `--subagents full`, sub-agent rows are in the index too (tagged `origin:"subagent"` /
+   `subagent_of`); then `agent-recall read --subagent-of <parent-session>` filters to one child.
 
 ## Rules (non-negotiable)
 

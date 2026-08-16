@@ -64,9 +64,9 @@ export const cursorAdapter: Adapter = {
     }
     for (const e of entries) {
       if (!e.isDirectory()) continue;
-      // Match the slugified project directory to this cwd. Timestamp-named dirs can't be matched to a
-      // cwd from disk alone, so we only claim slugs that correspond to the path.
-      if (e.name === slug || e.name.endsWith(slug)) {
+      // Match the slugified project directory to this cwd. Require an exact match or a boundary-safe
+      // suffix (`-<slug>`), so a sibling project sharing a name suffix isn't ingested (C-11).
+      if (e.name === slug || e.name.endsWith(`-${slug}`)) {
         out.push(...(await transcriptsUnder(join(projects, e.name, "agent-transcripts"))));
       }
     }

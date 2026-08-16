@@ -1,4 +1,17 @@
-# `.ai/index.jsonl` compile spec — build-ready
+# compile spec — historical reference (⚠️ not authoritative)
+
+> **Read this second, not first.** This is the pre-implementation research distillation. It predates
+> the build and uses old names in places. **The source of truth is the code** (`src/adapters/*`) and
+> [`SCHEMA.md`](SCHEMA.md) / [`DECISIONS.md`](DECISIONS.md). Where they disagree, they win. Known
+> corrections since this was written:
+>
+> - Store dir is **`.agent-recall/`** (not `.ai/`); the binary is **`agent-recall`** (not `sessions-sync`) — ADR-001.
+> - **Codex:** `response_item` is the **canonical** conversation source; `event_msg` is the derived UI
+>   stream we **skip** (the opposite of §5.3 below). See `src/adapters/codex.ts`.
+> - Cursor `stop` is installed **deliberately** for cloud coverage (idempotency makes it safe) — the
+>   "Never hook Stop" note below applies only to per-turn normalization, not to our idempotent sync.
+> - Default sub-agent mode is **`calls`** everywhere including hooks (ADR-007). §5.4–5.6 (Gemini/Grok/
+>   Aider) are aspirational; those adapters are tier-2/unbuilt (ADR-004).
 
 **For:** Mayank Saini · **Companion to:** `UNIFIED-FULL.txt` (the deep brief)
 **Purpose:** The mechanical, no-LLM sanitize/compile layer for a unified session store.
