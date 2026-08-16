@@ -29,8 +29,10 @@ the last agent do," or "why was X rejected."
 4. **Open raw only on demand.** Do NOT bulk-load `.agent-recall/raw/`. Follow a `raw` pointer
    (`raw/<agent>/<session>/events.jsonl#<seq>`) only when a specific decision is load-bearing and the
    `preview` isn't enough.
-5. **Grep for a topic.** To find prior work on something specific, grep the index for a keyword
-   (e.g. `grep -i "auth" .agent-recall/index.jsonl`).
+5. **Search instead of loading it all.** The index can be large — never read the whole file into
+   context. Grep it directly (`grep -i "auth" .agent-recall/index.jsonl`), or use the token-lean
+   reader which filters then pages: `agent-recall read --grep auth --role assistant --last 20`
+   (also `--session <id>`, `--agent <id>`, `--offset N`, `--json`). Page with `--last`/`--offset`.
 6. **Compaction events are summaries.** A line with `role:"event"` and a `raw` pointer whose native
    type is `compaction` carries the harness's own summary of the turns before it. Treat it as a lossy
    recap, not a source of truth — the original turns are still present earlier in the same session, so

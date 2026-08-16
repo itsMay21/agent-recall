@@ -44,7 +44,8 @@
     "test:watch": "vitest",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
-    "check": "npm run format && npm run typecheck && npm run test && npm run build"
+    "check": "npm run format && npm run typecheck && npm run test && npm run build",
+    "prepublishOnly": "npm run check && npm run build:plugin"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

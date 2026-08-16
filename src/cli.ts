@@ -115,33 +115,69 @@ async function cmdScan(args: string[]): Promise<void> {
   );
 }
 
+// Token-lean, filterable read so a consumer never has to load the whole index into context.
+// Filters (grep/session/role/agent) apply first; then a window (--last N, --offset M).
 async function cmdRead(args: string[]): Promise<void> {
   const projectDir = flagValue(args, "--cwd") || process.cwd();
-  const last = Number(flagValue(args, "--last") || "20");
+  const lastRaw = Number(flagValue(args, "--last") || "20");
+  const last = Number.isFinite(lastRaw) && lastRaw > 0 ? Math.floor(lastRaw) : 20;
+  const offsetRaw = Number(flagValue(args, "--offset") || "0");
+  const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? Math.floor(offsetRaw) : 0;
+  const grep = flagValue(args, "--grep")?.toLowerCase();
+  const sessionFilter = flagValue(args, "--session");
+  const roleFilter = flagValue(args, "--role");
+  const agentFilter = flagValue(args, "--agent");
+  const jsonOut = args.includes("--json");
   const { index } = storePaths(projectDir);
-  const lines: string[] = [];
+
+  const matched: Record<string, unknown>[] = [];
   try {
     const rl = createInterface({ input: createReadStream(index), crlfDelay: Infinity });
-    for await (const line of rl) if (line.trim()) lines.push(line);
+    for await (const line of rl) {
+      if (!line.trim()) continue;
+      if (grep && !line.toLowerCase().includes(grep)) continue;
+      let o: Record<string, unknown>;
+      try {
+        o = JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      if (sessionFilter && o["session"] !== sessionFilter) continue;
+      if (roleFilter && o["role"] !== roleFilter) continue;
+      if (agentFilter && o["agent"] !== agentFilter) continue;
+      matched.push(o);
+    }
   } catch {
     process.stdout.write("agent-recall: no store at " + index + "\n");
     return;
   }
-  for (const line of lines.slice(-last)) {
-    try {
-      const o = JSON.parse(line) as Record<string, unknown>;
-      const parts = [
-        o["ts"],
-        o["agent"],
-        o["role"],
-        o["name"] ?? "",
-        o["status"] ?? "",
-        o["preview"] ?? "",
-      ];
-      process.stdout.write(parts.filter((x) => x !== "").join("  ") + "\n");
-    } catch {
-      // skip
+
+  // Window: newest-first paging. --offset skips from the newest end, --last takes that many.
+  const end = matched.length - offset;
+  const start = Math.max(0, end - last);
+  const page = matched.slice(start, Math.max(start, end));
+  if (matched.length === 0) {
+    process.stdout.write("agent-recall: no matching rows\n");
+    return;
+  }
+  process.stdout.write(
+    `# ${matched.length} match(es); showing ${page.length} (offset ${offset})\n`,
+  );
+  for (const o of page) {
+    if (jsonOut) {
+      process.stdout.write(JSON.stringify(o) + "\n");
+      continue;
     }
+    const parts = [
+      o["ts"],
+      o["agent"],
+      o["session"],
+      o["role"],
+      o["name"] ?? "",
+      o["status"] ?? "",
+      o["preview"] ?? "",
+    ];
+    process.stdout.write(parts.filter((x) => x !== "" && x !== undefined).join("  ") + "\n");
   }
 }
 
@@ -153,8 +189,9 @@ function usage(): void {
       "Usage:",
       "  agent-recall sync --from-hook          compile the transcript named on a hook's stdin JSON",
       "  agent-recall sync --scan [--cwd DIR] [--store DIR] [--agent ID ...]   find & compile a project's transcripts",
-      "  agent-recall read [--last N] [--cwd DIR]               print recent index rows",
-      "  agent-recall install [--agent ID ...] [--cwd DIR]      wire hooks + AGENTS.md + skill",
+      "  agent-recall read [--grep S] [--session ID] [--role R] [--agent ID] [--last N] [--offset M] [--json]",
+      "                                        search & page the index (token-lean; never loads it all)",
+      "  agent-recall install [--agent ID ...] [--cwd DIR] [--no-backfill]   wire hooks + read layer + backfill",
       "",
       `  agents: ${AGENT_IDS.join(", ")}`,
       "",
