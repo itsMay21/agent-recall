@@ -1,0 +1,8 @@
+dist/
+plugin/bin/
+node_modules/
+coverage/
+pnpm-lock.yaml
+package-lock.json
+test/fixtures/
+docs/COMPILE-SPEC.md

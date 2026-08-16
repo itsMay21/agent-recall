@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "agent-recall",
+  "version": "0.1.0",
+  "description": "Read prior cross-agent session history before you start. Compiles Claude/Codex/Cursor/Hermes/Pi transcripts into .agent-recall/index.jsonl on session end, and ships the read-sessions skill so an incoming agent walks it instead of repeating a rejected design.",
+  "author": { "name": "Mayank Saini" },
+  "homepage": "https://github.com/itsMay21/agent-recall",
+  "repository": "https://github.com/itsMay21/agent-recall",
+  "license": "MIT",
+  "keywords": ["session", "memory", "recall", "agents.md", "cross-agent", "codex", "cursor", "pi"],
+  "hooks": "./hooks/hooks.json"
+}

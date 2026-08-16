@@ -1,0 +1,57 @@
+{
+  "name": "agent-recall",
+  "version": "0.1.0",
+  "description": "A unified, cross-agent session-recall layer: mechanically compile coding-agent transcripts (Claude Code, Codex, Cursor, Hermes, Pi, ...) into one redacted .agent-recall/index.jsonl any agent can read before it starts work. No LLM in the compile path.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Mayank Saini",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/itsMay21/agent-recall.git"
+  },
+  "keywords": [
+    "coding-agent",
+    "claude-code",
+    "codex",
+    "cursor",
+    "session",
+    "transcript",
+    "memory",
+    "agents.md",
+    "agent-skills"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "agent-recall": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "skill",
+    "plugin",
+    "docs",
+    "AGENTS.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "build:plugin": "npm run build && node scripts/build-plugin.mjs",
+    "dev": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "format": "prettier --check .",
+    "format:fix": "prettier --write .",
+    "check": "npm run format && npm run typecheck && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "prettier": "^3.4.0",
+    "tsup": "^8.5.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.0",
+    "vitest": "^2.1.0"
+  }
+}

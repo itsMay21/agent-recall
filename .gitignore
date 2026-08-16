@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Test / coverage
+coverage/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Editor / OS / agent-local state
+.DS_Store
+.idea/
+.vscode/
+.claude/
+.pi-subagents/
+
+# The unified store's RAW copies are NEVER committed (may hold pre-redaction bytes,
+# vendor auth files, secrets). The redacted index is committable per-project by the
+# consumer, but this tool's own repo does not ship a store.
+**/.agent-recall/raw/
+
+# Local scratch
+scratch/
+*.log
