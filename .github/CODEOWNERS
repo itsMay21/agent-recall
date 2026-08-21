@@ -1,0 +1,5 @@
+# Code ownership (advisory until branch protection / Pro enforces CODEOWNER review).
+# The load-bearing, security-sensitive surfaces:
+/src/sync/        @itsMay21
+/src/adapters/    @itsMay21
+/docs/CHARTER.md  @itsMay21
