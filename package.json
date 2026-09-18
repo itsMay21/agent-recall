@@ -52,7 +52,7 @@
     "prepublishOnly": "npm run check && npm run build:plugin"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
+    "@types/node": "^26.5.1",
     "prettier": "^3.4.0",
     "tsup": "^8.5.0",
     "tsx": "^4.19.0",
