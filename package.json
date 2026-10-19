@@ -57,7 +57,7 @@
     "demo": "npm run build && node scripts/demo.mjs"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
+    "@types/node": "^26.6.5",
     "prettier": "^3.9.9",
     "tsup": "^8.5.0",
     "tsx": "^4.23.15",
