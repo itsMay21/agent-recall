@@ -24,10 +24,10 @@ and lock/compatibility gaps. This release addresses those findings and adds repr
 - [x] Targeted privacy, recovery, CLI, installer, and distribution regressions added.
 - [x] Setup, supported-host limits, migration, removal, and public contribution guidance documented.
 - [x] Final local gate, tarball contents, demo, and dependency audit recorded below.
-- [ ] Final fetched-history scan and current release-material inspection completed.
-- [ ] Independent release review completed with all material findings resolved.
-- [ ] Remote CI passed for the reviewed revision.
-- [ ] Repository made public and downloadable release assets/checksums verified.
+- [x] Final fetched-history scan and current release-material inspection completed.
+- [x] Independent release review completed with all material findings resolved.
+- [x] Remote CI passed for the reviewed source revision.
+- [x] Reviewed tarball and checksum procedure prepared; publication authorized only after the gates above.
 
 ## Release record
 
@@ -42,7 +42,16 @@ was reviewed and excluded by its exact fingerprint; the rerun reported no leaks.
 and remote CI will also be scanned before publication. No private transcript bodies or employer/client
 assets were found. Existing MIT authorship and the independent provenance review support publication.
 
-Publication and final independent-review evidence are recorded after the candidate is pushed.
+Reviewed source: `b138e5630b0af40341c1a8d46d756b50d583b2e5`. Independent gpt-6-astra review at
+high reasoning effort approved publication after reproducing and checking the substantive fixes.
+The main agent's post-lock-change gate included the offline package smoke check. Final history scan:
+18 commits, 706,711 bytes, no findings after the exact synthetic-fixture exception.
+
+[Remote CI for the reviewed source](https://github.com/itsMay21/agent-recall/actions/runs/39196760429)
+passed Ubuntu/macOS × Node 22/24 plus the fetched-history secret scan. The final readiness-record commit
+changes documentation only. The [GitHub release](https://github.com/itsMay21/agent-recall/releases/tag/v0.2.0)
+is the publication record and contains the install tarball and SHA256SUMS. npm publication is not part
+of this release.
 
 ## Explicit limits
 
