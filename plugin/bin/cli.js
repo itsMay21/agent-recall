@@ -1721,8 +1721,8 @@ var package_default = {
     prettier: "^3.9.9",
     tsup: "^8.5.0",
     tsx: "^4.23.15",
-    typescript: "~5.9.3",
-    vitest: "^4.1.12"
+    typescript: "~7.0.2",
+    vitest: "^5.0.5"
   },
   overrides: {
     esbuild: "^0.28.2",

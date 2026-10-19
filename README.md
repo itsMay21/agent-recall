@@ -1,5 +1,7 @@
 # Agent Recall
 
+![Agent Recall: carry history between coding agents through a local index](docs/assets/agent-recall.png)
+
 **Carry useful history between coding agents.**
 
 Agent Recall turns local coding-agent transcripts into a searchable, redacted JSONL index in your

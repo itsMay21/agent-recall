@@ -16,6 +16,12 @@ of the release tarball. The plugin bundle is generated from this repository's so
 third-party screenshots, real transcript fixtures, or generated launch art are part of the software package.
 Vendor names identify supported formats and imply no endorsement.
 
+The README banner at `docs/assets/agent-recall.png` is original AI-generated launch artwork,
+created with OpenAI ImageGen for this project and visually reviewed before inclusion. It is a
+conceptual illustration of transcript indexing, not a product screenshot or measured result.
+No third-party reference images or vendor logos were supplied. The PNG is kept in the repository;
+the release package's file allowlist excludes this asset directory.
+
 Tests use synthetic inline fixtures. Historical live-session documents retain aggregate observations,
 not raw bodies. Local usernames/project labels in current documentation have been generalized. Git
 history includes the author's existing commit attribution and earlier documentation; review found no
