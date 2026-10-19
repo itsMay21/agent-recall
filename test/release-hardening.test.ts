@@ -233,13 +233,26 @@ describe("durable identity and recovery", () => {
     }
     expect(await readFile(file, "utf8")).toBe(original);
   });
-  it("reclaims an old empty lock left between creation and token write", async () => {
+  it("refuses stale empty locks until offline manual recovery", async () => {
     const root = join(dir, ".agent-recall");
     await mkdir(root);
     await writeFile(join(root, ".lock"), "");
     await utimes(join(root, ".lock"), new Date(0), new Date(0));
+    await expect(acquireLock(root, 1)).rejects.toThrow("stale store lock");
+    expect(await readFile(join(root, ".lock"), "utf8")).toBe("");
+    await rm(join(root, ".lock"));
     const lock = await acquireLock(root, 1);
     await releaseLock(lock);
+  });
+  it("never races reclaimers into overlapping critical sections", async () => {
+    const root = join(dir, ".agent-recall");
+    await mkdir(root);
+    const path = join(root, ".lock");
+    await writeFile(path, "99999999 dead");
+    await utimes(path, new Date(0), new Date(0));
+    const results = await Promise.allSettled(Array.from({ length: 8 }, () => acquireLock(root, 1)));
+    expect(results.every((result) => result.status === "rejected")).toBe(true);
+    expect(await readFile(path, "utf8")).toBe("99999999 dead");
   });
   it("keeps distinct session identities after home and Unicode sanitation", async () => {
     const home = "/Users/tester";

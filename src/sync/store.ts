@@ -224,9 +224,9 @@ export async function acquireLock(root: string, staleMs = 60_000): Promise<Store
         throw err;
       });
       if (Date.now() - info.mtimeMs > staleMs && !ownerAlive(owner)) {
-        if ((await readFile(path, "utf8").catch(() => "")) === owner)
-          await rm(path, { force: true });
-        continue;
+        throw new Error(
+          `stale store lock at ${path}; ensure all sync processes have stopped, remove that lock file, then retry`,
+        );
       }
       await sleep(25);
     }

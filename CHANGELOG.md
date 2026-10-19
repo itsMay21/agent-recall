@@ -11,7 +11,7 @@ Initial public release, following the private 0.1 prototype.
 - Redact metadata, nested keys and structured credential values; remove typed nested image payloads.
 - Protect raw writes before copying sources, use private POSIX modes, reject unsafe store paths, and preserve custom ignore rules.
 - Deduplicate index identities when raw detail is missing; repair interrupted final appends and expose complete corruption or shortened sources.
-- Keep live locks owned; return failures from manual commands while hooks remain non-blocking.
+- Keep live locks owned and require offline manual recovery of stale locks; return failures from manual commands while hooks remain non-blocking.
 - Validate CLI args, preserve Codex system-role provenance and absent status, bound reader memory, and emit clean JSONL.
 - Correct hook timeout units and host-specific setup guidance; require Node 22.13 or newer.
 - Add synthetic demo, reproducible benchmark, offline distribution checks, updated dependencies and pinned CI actions.

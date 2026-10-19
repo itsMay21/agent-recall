@@ -45,9 +45,10 @@ code points. Native compaction summaries are recorded as events, never expanded 
     events.jsonl            # sanitized detail, including full tool args/results
 ```
 
-The store uses one exclusive file lock. A live owner's lock is not reclaimed based on age. Locks
-from dead owners are reclaimable after 60 seconds; writes wait for at most about 750ms, then report
-that the store is busy. Release compares the owner token. Directories are `0700`, files `0600` on
+The store uses one exclusive file lock. A live owner's lock is not reclaimed based on age. Stale locks
+from dead or incomplete owners are reported after 60 seconds and require offline manual removal;
+automatic deletion races between reclaimers and is deliberately disabled. Other writers wait at most
+about 750ms, then report that the store is busy. Release compares the owner token. Directories are `0700`, files `0600` on
 POSIX systems; symlinked store directories and destination event files are refused. This is local
 privacy hygiene, not isolation from another process with the same user privileges.
 

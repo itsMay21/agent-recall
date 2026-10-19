@@ -101,8 +101,9 @@ use `--top-level` or `--subagent-of ID`. Parents with multiple children return a
   `PI_CODING_AGENT_DIR`; Cursor scan uses `CURSOR_CONFIG_DIR`. Some stores may be remote or unavailable.
 - **Hook exits successfully but nothing appears:** hooks deliberately warn and exit zero. Read stderr,
   verify the package is installed, then run a manual scan (which returns nonzero on errors).
-- **Busy store:** wait for the current writer and retry. A dead owner's lock is reclaimable after
-  60 seconds. Do not delete a live writer's lock.
+- **Busy store:** wait for the current writer and retry. After 60 seconds, a dead/incomplete owner's lock produces a stale-lock diagnostic. Stop all sync
+  processes, remove only that `.agent-recall/.lock` file, and retry. There is no automatic stale-lock
+  deletion because competing reclaimers could remove a new writer's lock. Do not delete a live lock.
 - **Corrupt/shortened store:** preserve a backup, move the entire `.agent-recall` directory aside, and
   rebuild from original vendor sources. Do not edit rows during sync. Same-length source rewrites are
   not detected. Recovery repairs only a torn final record, not arbitrary history damage.

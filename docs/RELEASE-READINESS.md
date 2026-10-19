@@ -32,7 +32,7 @@ and lock/compatibility gaps. This release addresses those findings and adds repr
 ## Release record
 
 Local candidate validation: Node 22.23.2 / npm 10.9.8 / macOS arm64. `npm run check` passed:
-format, strict types, **87 tests across seven specs**, bundled CLI/plugin, and an offline package test
+format, strict types, **88 tests across seven specs**, bundled CLI/plugin, and an offline package test
 with real generated hook execution. `npm audit --json` returned **0 vulnerabilities**. Demo passed
 with four synthetic cross-agent rows, credential redaction and zero duplicate rows on repeat. The
 fresh bundle matches `plugin/bin/cli.js` byte for byte. Benchmark measurements are in BENCHMARKS.md.

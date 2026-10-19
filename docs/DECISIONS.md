@@ -11,7 +11,9 @@ Raise the runtime floor to Node 22.13 to support the SQLite adapter without the 
 Protect raw writes in the compiler, sanitize metadata and structured credentials, and deduplicate
 against persisted index identities independently of raw files. Recover only interrupted final appends;
 fail on complete corruption or shortened sources. Manual failures return nonzero; hooks warn and stay
-non-blocking. Keep same-length source rewriting and native-host lifecycle certification explicit limits.
+non-blocking. Disable automatic stale-lock deletion; concurrent reclaimers cannot safely compare-and-delete a lock
+using these filesystem primitives. Stale-lock recovery requires stopped writers and manual removal.
+Keep same-length source rewriting and native-host lifecycle certification explicit limits.
 
 Correct hook timeout units and host guidance. Pi is manual collection in this release, Cursor remains
 experimental, and research references do not establish this project's effect on agent outcomes.
