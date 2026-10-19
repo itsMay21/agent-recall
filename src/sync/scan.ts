@@ -3,6 +3,7 @@
 // history that predates the hook, once, at setup. Future sessions are then handled incrementally by
 // the session-close hooks. Because compile is idempotent, running this repeatedly is safe.
 
+import { resolve } from "node:path";
 import { stat } from "node:fs/promises";
 import type { Adapter, AgentId, SubagentMode } from "./types.js";
 import { compileSession, type CompileResult } from "./compile.js";
@@ -29,9 +30,15 @@ export async function compileLocator(
   storeDir: string,
   home: string,
   subagents: SubagentMode = "calls",
+  expectedCwd?: string,
 ): Promise<CompileResult | null> {
   const parsed = await adapter.parse(locator);
   if (!parsed) return null;
+  if (expectedCwd && parsed.cwd && resolve(parsed.cwd) !== resolve(expectedCwd)) {
+    throw new Error(
+      "transcript project does not match the requested project; refusing cross-project ingestion",
+    );
+  }
   const isSub = parsed.origin === "subagent";
   if (isSub && subagents === "off") return null;
   const fallbackTs = await fallbackTsFor(locator);
@@ -70,7 +77,7 @@ export async function scanAndCompile(opts: ScanOptions): Promise<CompileResult[]
     let locators: string[] = [];
     try {
       locators = await adapter.locate({
-        cwd: opts.cwd,
+        cwd: resolve(opts.cwd),
         home: opts.home,
         env: opts.env,
         subagents,
@@ -81,7 +88,7 @@ export async function scanAndCompile(opts: ScanOptions): Promise<CompileResult[]
     }
     for (const loc of locators) {
       try {
-        const r = await compileLocator(adapter, loc, opts.storeDir, opts.home, subagents);
+        const r = await compileLocator(adapter, loc, opts.storeDir, opts.home, subagents, opts.cwd);
         if (r) results.push(r);
       } catch (err) {
         opts.onError?.(`${adapter.id} parse failed for ${loc}: ${(err as Error).message}`);

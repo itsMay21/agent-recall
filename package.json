@@ -1,6 +1,6 @@
 {
-  "name": "agent-recall",
-  "version": "0.1.0",
+  "name": "@itsmay21/agent-recall",
+  "version": "0.2.0",
   "description": "A unified, cross-agent session-recall layer: mechanically compile coding-agent transcripts (Claude Code, Codex, Cursor, Hermes, Pi, ...) into one redacted .agent-recall/index.jsonl any agent can read before it starts work. No LLM in the compile path.",
   "type": "module",
   "license": "MIT",
@@ -25,7 +25,7 @@
     "agent-skills"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13.0"
   },
   "bin": {
     "agent-recall": "./dist/cli.js"
@@ -34,10 +34,11 @@
     "dist",
     "skill",
     "plugin",
-    "docs",
-    "AGENTS.md",
+    "docs/*.md",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "SECURITY.md",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsup",
@@ -48,15 +49,24 @@
     "test:watch": "vitest",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
-    "check": "npm run format && npm run typecheck && npm run test && npm run build",
-    "prepublishOnly": "npm run check && npm run build:plugin"
+    "check": "npm run format && npm run typecheck && npm run test && npm run build:plugin && npm run test:package",
+    "prepublishOnly": "npm run check",
+    "test:package": "node scripts/smoke-release.mjs",
+    "benchmark": "tsx scripts/benchmark.ts",
+    "prepack": "npm run build:plugin",
+    "demo": "npm run build && node scripts/demo.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "prettier": "^3.4.0",
+    "prettier": "^3.9.9",
     "tsup": "^8.5.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.9.0",
-    "vitest": "^2.1.0"
+    "tsx": "^4.23.15",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.12"
+  },
+  "overrides": {
+    "esbuild": "^0.28.2",
+    "source-map-js": "^1.2.2",
+    "tinypool": "^2.1.2"
   }
 }

@@ -1,101 +1,139 @@
-# agent-recall
+# Agent Recall
 
-**A unified, cross-agent session-recall layer.** When a coding-agent session ends, agent-recall
-mechanically ingests that vendor's native transcript for your project, sanitizes it, and appends it to
-one line-oriented store — `.agent-recall/index.jsonl` — that **any** later agent (Claude Code, Codex,
-Cursor, Hermes, Pi, …) can read before it starts, so it doesn't re-propose a rejected design or
-re-walk a dead path.
+**Carry useful history between coding agents.**
 
-> **Read, not resume.** agent-recall gives the next agent the _anthropology_ of what happened — not a
-> faithful cross-vendor resume (tool trees don't survive translation). And there is **no LLM in the
-> compile path**: it parses, redacts, and indexes. Nothing is summarized or guessed.
+Agent Recall turns local coding-agent transcripts into a searchable, redacted JSONL index in your
+project. A later agent can read what was tried, inspect the original evidence when needed, and check
+it against the current code.
 
-## Why
+[![CI](https://github.com/itsMay21/agent-recall/actions/workflows/ci.yml/badge.svg)](https://github.com/itsMay21/agent-recall/actions/workflows/ci.yml)
+[![MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-Every coding agent stores its sessions in its own format, in its own home-directory location, and none
-of them can see what the others did in your project. Dumping a previous agent's full raw history into
-the next one is measurably _worse than starting fresh_ (Apple SSPM, [arXiv:2607.09493](https://arxiv.org/abs/2607.09493): 71% full-history vs 79% no-memory
-vs 96% selective). agent-recall keeps the raw safe and gives the next agent a compact, redacted index —
-the selective middle path — plus a skill that teaches it to treat history as evidence, not orders.
-
-## How it works
-
-```
-WRITE                          STORE                        READ
-agent session-close hook  →    .agent-recall/index.jsonl  →  AGENTS.md pointer
-runs `agent-recall sync`       (redacted, committable)       + read-sessions skill
-(parse → redact → index)       raw/  (gitignored)            (agents just Read the JSONL)
+```text
+Claude · Codex · Hermes · Pi · Cursor
+                  ↓ parse, redact, index
+       .agent-recall/index.jsonl
+                  ↓ read and search
+          your next agent session
 ```
 
-The **write** side is one tiny headless command that each agent's session-close hook calls. The
-**read** side needs nothing installed — agents read the JSONL directly. See
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+There is no model call, background service, telemetry, or network request in the compiler. It copies
+and truncates native fields; it does not summarize decisions or replay another agent's session.
+Read-side guidance treats stored text as untrusted evidence, never instructions.
 
-## Supported agents (tier-1)
+## Try it
 
-| Agent       | Ingest                  | Close trigger       | Read layer                       |
-| ----------- | ----------------------- | ------------------- | -------------------------------- |
-| Claude Code | ✅                      | `SessionEnd` hook   | `CLAUDE.md`→`@AGENTS.md` + skill |
-| Codex       | ✅                      | `SessionEnd` hook   | native `AGENTS.md` + skill       |
-| Hermes      | ✅                      | `on_session_end`    | native `AGENTS.md` + skill       |
-| Pi          | ✅                      | sync-on-start       | native `AGENTS.md` + skill       |
-| Cursor      | ⚠️ experimental (lossy) | `sessionEnd`/`stop` | native `AGENTS.md` + skill       |
-
-Cursor is experimental — the adapter is written to the documented `agent-transcripts` schema but not
-yet validated against a live `~/.cursor` store. Gemini CLI, OpenCode, Goose, Cline, Amp, and others are
-documented as tier-2 in [`docs/CONSUMPTION.md`](docs/CONSUMPTION.md).
-
-## What it is not
-
-| Not…                   | Because                                                                                |
-| ---------------------- | -------------------------------------------------------------------------------------- |
-| an MCP memory server   | No runtime process; it writes a file on session close. Agents `Read` it directly.      |
-| cross-vendor resume    | Tool trees don't survive translation — you get the _record_, not a replayable session. |
-| an LLM memory gardener | No model in the compile path. Nothing is summarized, ranked, or invented.              |
-
-## Install
-
-**Claude Code (plugin) — no PATH, no npm:**
+Requires **Node 22.13 or newer**, npm, and macOS or Linux. No runtime dependencies.
 
 ```bash
-claude plugin marketplace add itsMay21/agent-recall   # requires the repo to be public
+git clone https://github.com/itsMay21/agent-recall.git
+cd agent-recall
+npm ci
+npm run check
+npm run demo
+```
+
+The demo uses synthetic Claude and Codex sessions in a temporary directory, shows redaction and
+cross-agent search, then confirms that a second sync adds nothing. It does not read your own sessions.
+
+## Install in a project
+
+Download `itsmay21-agent-recall-0.2.0.tgz` from the [v0.2.0 release](https://github.com/itsMay21/agent-recall/releases/tag/v0.2.0)
+and check its SHA-256 against `SHA256SUMS`. In the project where you want recall:
+
+```bash
+npm install --save-dev /path/to/itsmay21-agent-recall-0.2.0.tgz
+npx --no-install --package=@itsmay21/agent-recall -- agent-recall install --agent claude-code codex --no-backfill
+```
+
+Then load existing history explicitly:
+
+```bash
+npx --no-install --package=@itsmay21/agent-recall -- agent-recall sync --scan --agent claude-code codex
+npx --no-install --package=@itsmay21/agent-recall -- agent-recall read --grep auth --last 10
+```
+
+The package identity is **`@itsmay21/agent-recall`**, distributed here as a release tarball. It is not
+published to npm. The unscoped npm package `agent-recall` belongs to an unrelated project; use the
+commands above. Installed hooks specify the scoped identity and disable package downloads.
+
+Without `--no-backfill`, installation scans existing sessions for the selected agents. It appends a
+marked `AGENTS.md` section, installs the `read-sessions` skill, adds ignore rules, and merges host hook
+configuration. Existing hooks remain intact. [Setup details and activation](docs/CONSUMPTION.md).
+
+**Claude Code plugin:**
+
+```bash
+claude plugin marketplace add itsMay21/agent-recall
 claude plugin install agent-recall@agent-recall
 ```
 
-The plugin's `SessionEnd` hook runs the bundled binary directly (`node "${CLAUDE_PLUGIN_ROOT}/bin/cli.js"`).
+The plugin bundles the CLI and read skill, and runs a Claude SessionEnd hook without npm. Plugin-only
+installation does not add the project pointer or backfill history. Run a manual scan to catch up after
+a timed-out hook; Claude's plugin SessionEnd budget can be only 1.5 seconds.
 
-**Everyone else (npm):** install the CLI locally, then wire it into the project.
+## Compatibility
 
-```bash
-npm i -D agent-recall
-npx agent-recall install --agent claude-code codex hermes pi   # (cursor is experimental)
+| Source      | Transcript support                                       | Automatic collection                                            |
+| ----------- | -------------------------------------------------------- | --------------------------------------------------------------- |
+| Claude Code | JSONL, typed tools, sidechains                           | Installer or plugin SessionEnd hook                             |
+| Codex       | Local rollout JSONL, tools, compaction, linked subagents | Experimental SessionEnd hook; host feature opt-in may be needed |
+| Hermes      | Read-only `state.db` through `node:sqlite`               | Manual user-level hook setup and consent                        |
+| Pi          | Session JSONL, tools, compaction                         | Manual scan or your own lifecycle extension                     |
+| Cursor      | Experimental, lossy text JSONL                           | Experimental `sessionEnd` / `stop` hooks                        |
+
+Synthetic adapter and real CLI tests run in CI. Earlier private live-source checks are documented as
+historical evidence; they are not a current host certification. Cursor has no live-store validation.
+Hook payloads and transcript schemas can change. [Evidence and limits](docs/TESTING.md).
+
+## What gets stored
+
+```json
+{
+  "v": 1,
+  "ts": "2026-10-19T00:00:00Z",
+  "agent": "codex",
+  "session": "demo",
+  "seq": 0,
+  "role": "user",
+  "preview": "Investigate the auth retry",
+  "raw": "raw/codex/demo/events.jsonl#0"
+}
 ```
 
-`install` writes the session-close hook config, an `AGENTS.md` pointer (and `CLAUDE.md` shim), the
-`read-sessions` skill, and backfills existing sessions. The installed hooks call
-`npx --no-install agent-recall …`, which resolves the local (or global) binary — so **the `npm i -D`
-step is required** for hooks to run on close. See [`docs/CONSUMPTION.md`](docs/CONSUMPTION.md).
+Each row includes a native text preview of at most 200 code points, optional tool name and recorded
+status, and a pointer to local detail. `read --json` emits JSONL without a prose header. Filters run
+before `--last` / `--offset`; paging follows append order, which can differ from event time after a
+backfill. Agents can also read the file directly without installing this CLI.
 
-## Privacy
+Subagents default to `--subagents calls`: their detail stays local in `raw/`. Use `full` to index their
+streams or `off` to exclude them. [Schema](docs/SCHEMA.md) · [Architecture](docs/ARCHITECTURE.md).
 
-Raw vendor transcripts contain plaintext secrets. agent-recall **never commits raw**
-(`.agent-recall/raw/` is gitignored) and redacts every field — tool args and stdout included — before it
-reaches the index, and rewrites your home dir to `~` in previews. **The `cwd` field keeps the absolute
-project path**, so review an index before committing it to a _public_ repo. Redaction is pattern-based,
-not exhaustive — see [`SECURITY.md`](SECURITY.md) and [`docs/CHARTER.md`](docs/CHARTER.md) §5.
+## Privacy and reliability
 
-## Docs
+Known secret patterns are redacted from text, metadata, nested keys, and structured credential
+values. Home paths in text become `~`; **`cwd` still records your absolute project path**. Arbitrary
+PII and unknown secret formats can survive. Review the index before sharing it.
 
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — the three layers · [`docs/SCHEMA.md`](docs/SCHEMA.md) — the index line
-- [`docs/DECISIONS.md`](docs/DECISIONS.md) — ADRs · [`docs/CHARTER.md`](docs/CHARTER.md) — non-negotiables
-- [`docs/CONSUMPTION.md`](docs/CONSUMPTION.md) — how each agent installs · [`docs/TESTING.md`](docs/TESTING.md) / [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) — evidence
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) · [`SECURITY.md`](SECURITY.md) · [`CHANGELOG.md`](CHANGELOG.md)
+Verbatim source copies live in `raw/` and can contain secrets. Direct sync and plugin hooks create
+store-local Git ignore rules before copying them. Store directories and files use POSIX permissions
+`0700` / `0600`. Git ignore rules do not remove files already tracked or prevent a force-add.
 
-## Status
+A per-store lock serializes writers. Interrupted final JSONL appends are repaired; complete corruption
+and shortened transcripts fail visibly. Re-syncing after an index-only clone restores local detail
+without duplicating index identities. Sources must remain append-only. Filesystem permissions do not
+isolate the tool from malicious processes running as your own user.
 
-Early (v0.1). The compile engine is well-tested (48 tests, verified on real Claude/Codex/Hermes/Pi
-sessions); Cursor is experimental. See [`docs/DECISIONS.md`](docs/DECISIONS.md).
+[Security policy](SECURITY.md) · [Upgrade, troubleshooting, and removal](docs/CONSUMPTION.md).
 
-## License
+## Development and evidence
 
-MIT © Mayank Saini
+- `npm run check` — format, types, tests, build, and a clean offline package/hook smoke check.
+- `npm run benchmark` — reproducible synthetic compile/search timings; no external agent or API key.
+- [Release readiness](docs/RELEASE-READINESS.md), [validation](docs/TESTING.md), [benchmarks](docs/BENCHMARKS.md).
+- [Contributing](CONTRIBUTING.md), [decisions](docs/DECISIONS.md), [provenance](docs/PROVENANCE.md), [changelog](CHANGELOG.md).
+
+Agent Recall has not been evaluated for improvements in coding-agent task success. Its tests establish
+mechanical behavior and distribution checks, not that an agent will make better decisions.
+
+MIT © 2026 Mayank Saini.

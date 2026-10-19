@@ -1,93 +1,120 @@
-# CONSUMPTION — how each agent installs & reads
+# Setup, host integration, and troubleshooting
 
-How agent-recall plugs into each harness: which file to write for the **read** layer, and which
-hook/command fires the **sync** on session close. Compiled from official docs, 2026-08-16. Items
-marked ⚠️ need per-version confirmation; ❌ = mechanism does not exist.
+Use Node >=22.13 and npm on macOS or Linux. Hermes also needs `node:sqlite` enabled. Windows is not
+validated by this release. Hooks and vendor schemas are version-sensitive; the manual scan is the
+common collection path.
 
-## Tier-1 (fully built + tested)
+## Install from this release
 
-### Claude Code
+Download the tarball and `SHA256SUMS` from [v0.2.0](https://github.com/itsMay21/agent-recall/releases/tag/v0.2.0).
+Verify the checksum using `shasum -a 256` (macOS) or `sha256sum` (Linux), then install in your project:
 
-- **Read:** reads `CLAUDE.md`, **not** `AGENTS.md`. Install writes `CLAUDE.md` → first line `@AGENTS.md`
-  (import, max depth 4) or a symlink. Skills: `.claude/skills/<name>/SKILL.md` (project),
-  `~/.claude/skills/` (user).
-- **Close:** `SessionEnd` hook in `.claude/settings.json`. stdin JSON has `session_id`,
-  `transcript_path`, `cwd`, `permission_mode`, `reason` (`clear|resume|logout|prompt_input_exit|
-bypass_permissions_disabled|other`). **Budget: 1.5s shared, raised to per-hook `timeout`, max 60s**
-  → set `timeout` and detach heavy work. `SessionStart` stdout is injected into context.
-- **Plugin:** full plugin system — `.claude-plugin/plugin.json` (only `name` required); `skills/`,
-  `commands/`, `hooks/hooks.json`, `.mcp.json` live at plugin **root**. Marketplace via
-  `.claude-plugin/marketplace.json`. Install: `/plugin install <p>@<market>`; dev: `--plugin-dir`.
-- **Memory:** first-class auto-memory at `~/.claude/projects/<project>/memory/MEMORY.md` (first
-  200 lines / 25 KB auto-loaded) + `CLAUDE.md`. Externally writable (plain markdown).
+```bash
+npm install --save-dev /path/to/itsmay21-agent-recall-0.2.0.tgz
+npx --no-install --package=@itsmay21/agent-recall -- agent-recall install --agent claude-code codex --no-backfill
+```
 
-### Codex CLI
+This is an unpublished scoped package distributed as a GitHub release artifact. Do not install the
+unrelated unscoped npm package. Hooks use an explicit scoped package and `--no-install`, so a missing
+local binary warns rather than downloading code during session shutdown. Keep the local dependency
+installed wherever hooks execute; a global install is not the documented path.
 
-- **Read:** native `AGENTS.md` (+ `AGENTS.override.md`, fallbacks via `project_doc_fallback_filenames`);
-  merged root→cwd, cap `project_doc_max_bytes` = 32 KiB. Skills: `.agents/skills/` (scanned cwd→root),
-  `~/.agents/skills/`, `/etc/codex/skills`.
-- **Close:** `SessionEnd` hook in `.codex/config.toml` `[hooks]` or `.codex/hooks.json` (same 3-level
-  schema as Claude). stdin: `session_id`, `transcript_path` (e.g. `.codex/rollout.jsonl`, may be null),
-  `cwd`, `reason` (currently always `other`). Synchronous + advisory. **Do not use `notify`** — it's
-  turn-level (`agent-turn-complete`), not session-end.
-- **Plugin:** bundles = skills + MCP connectors; **no Claude-style CLI plugin manifest** found → install
-  skill + hooks + `[mcp_servers]` separately.
+Use the same `npx --no-install --package=@itsmay21/agent-recall -- agent-recall` prefix for commands
+below, or use `node /absolute/path/to/dist/cli.js` from a built source checkout.
 
-### Cursor (IDE + cursor-agent CLI + cloud)
+## Installer writes
 
-- **Read:** native `AGENTS.md` (+ nested). Rules: `.cursor/rules/*.mdc` (frontmatter `description`,
-  `globs`, `alwaysApply`). Skills: `.cursor/skills/`, `.agents/skills/` (project); `~/.cursor/skills/`,
-  `~/.agents/skills/` (user). `disable-model-invocation: true` makes a skill a pure slash command.
-- **Close:** `.cursor/hooks.json` (project), `~/.cursor/hooks.json` (user — **not loaded in cloud**).
-  Events include `sessionStart`, `sessionEnd`, `stop`, `preToolUse`, `postToolUse`, …
-  **`sessionEnd` is IDE-only** ("cloud agents have no editor-lifetime session boundary"); `stop` fires
-  in all environments incl. cloud. Cloud supports only `command`-type hooks. → install `sessionEnd`
-  **and** `stop` (idempotent) in the **project** file for full coverage. MCP: `.cursor/mcp.json`.
+`install --agent <ids> --cwd /your/project` accepts `claude-code`, `codex`, `cursor`, `hermes`, and
+`pi` (`claude` is an install alias). Omit `--agent` to select all five. Existing configuration is
+validated before writes; invalid hooks produce an error. Existing hook entries and project text are
+preserved. Reinstalling does not duplicate the marked pointer or hooks.
 
-### Hermes
+The shared read layer is `.agents/skills/read-sessions/SKILL.md` plus a marked `AGENTS.md` section.
+Raw ignore rules are added to project `.gitignore`; sync additionally creates `.agent-recall/.gitignore`.
+Hermes selection also copies the read skill to `$HERMES_DIR/skills`, or `~/.hermes/skills`.
+Without `--no-backfill`, existing selected-agent sessions for this project are ingested immediately.
 
-- **Read:** native `AGENTS.md` + `MEMORY.md`/`USER.md`/`SOUL.md` (unless `--ignore-rules`). Skills:
-  `~/.hermes/skills/` (auto-register as slash commands).
-- **Close:** native `on_session_start` / `on_session_end` in `~/.hermes/config.yaml`. Managed via
-  `hermes hooks {list,test,doctor,revoke}`; requires an entry in `~/.hermes/shell-hooks-allowlist.json`
-  (**user consent** — install must print the exact command for the user to approve). Headless: `hermes -z`.
-- **Memory:** `MEMORY.md` + `hermes memory`.
+## Collection by host
 
-### Pi
+| Host        | Installed integration                                                        | Activation or remaining work                                                                                       |
+| ----------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Claude Code | `.claude/settings.json` SessionEnd; Claude read skill and `CLAUDE.md` import | Restart the host and inspect hooks. Configured timeout is 15 **seconds**. Host shutdown budgets can be shorter.    |
+| Codex       | `.codex/hooks.json` SessionEnd, explicit `--agent codex`                     | Experimental host feature; `codex -c features.codex_hooks=true` where supported. Timeout is 3 **seconds**.         |
+| Cursor      | `.cursor/hooks.json` `sessionEnd` and `stop`, explicit `--agent cursor`      | Experimental payload/JSONL integration. Enable transcript export in the host. Null transcript paths warn and skip. |
+| Hermes      | Read skill plus printed hook guidance                                        | Add the user-level hook below and approve it in the foreground host.                                               |
+| Pi          | Read pointer/skill plus printed guidance                                     | Run a scan manually or write a lifecycle extension. No extension is installed.                                     |
 
-- **Read:** native `AGENTS.md` (`~/.pi/agent/AGENTS.md` → parents → cwd; `AGENTS.override.md` replaces).
-  Skills: `~/.pi/agent/skills/`, `.pi/skills/`, `.agents/skills/`.
-- **Close:** ⚠️ **no `session_start`/`session_end` event.** Closest is `agent_end` (per prompt/turn) via
-  a TS extension `pi.on(...)`. Strategy: sync-on-next-start via a small extension on `agent_start`, or
-  rely on `agent-recall sync --scan`. Env `PI_SESSION_FILE`/`PI_SESSION_ID` are exposed to bash tools.
-- **Trust:** `~/.pi/agent/trust.json` prompts before loading project resources.
+Hermes guidance uses a list of command objects:
 
-## Tier-2 (stub / later PR) — reference
+```yaml
+hooks:
+  on_session_end:
+    - command: "npx --no-install --package=@itsmay21/agent-recall -- agent-recall sync --from-hook --agent hermes"
+      timeout: 15
+```
 
-| Agent                | Read layer                                     | Session-close hook                                                                                      | Notes                                                                      |
-| -------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Gemini CLI           | `GEMINI.md` (AGENTS.md via `context.fileName`) | `SessionEnd` hook in `settings.json` / extension `hooks/hooks.json`                                     | 30-day retention; verify headless firing                                   |
-| OpenCode             | native `AGENTS.md`                             | `session.idle` plugin event (JS/TS)                                                                     | ⚠️ await-before-exit bug #16879                                            |
-| Goose                | `.goosehints`, `AGENTS.md`                     | `SessionEnd` in Open-Plugins `hooks.json` (`~/.agents/plugins/<n>/hooks/hooks.json`)                    | context files need `--with-builtin developer`                              |
-| Cline                | `.clinerules/`, `AGENTS.md`                    | ext: **no clean completion event** (only `TaskCancel`/`PostToolUse`); SDK: `run_end`/`session_shutdown` | ext hooks macOS/Linux only; Memory Bank is a prompt convention, not native |
-| Amp                  | `AGENTS.md` (CLAUDE.md fallback)               | ⚠️ `session.start` yes, **no `session.end`** — approximate via `agent.end`/`tool.result`                | server is canonical; local mirror may be a stub                            |
-| Kimi CLI             | `AGENTS.md`                                    | ⚠️ hooks in `kimi.plugin.json` (event set unverified)                                                   | two products: kimi-cli (Py) vs kimi-code (TS)                              |
-| Qwen Code            | `QWEN.md`, `AGENTS.md`                         | ⚠️ `/hooks` exists; session-end unverified                                                              | Gemini-CLI fork                                                            |
-| Crush                | `CRUSH.md`, `AGENTS.md`                        | ⚠️ "preliminary" hooks in `crush.json`                                                                  | also reads `.claude/skills`, `.cursor/skills`                              |
-| Antigravity          | `AGENTS.md` > `GEMINI.md`                      | ❌ IDE, no documented session-lifecycle hook                                                            | install pattern likely N/A                                                 |
-| ZCode (GLM)          | `~/.zcode/AGENTS.md` + workspace               | ❓ unverified                                                                                           | third-party docs only                                                      |
-| DeepSeek "Deep Code" | AGENTS.md-class                                | ❓ unverified                                                                                           | Agent Skills supported                                                     |
+Approve the hook through Hermes's documented first-use consent flow. It must run from a project that
+has the package installed. A session id is used to select messages from its read-only state database.
 
-**Ambiguous source names:** "go" → almost certainly **Goose**. "t3" → no known coding CLI; candidates
-T3 Chat (not a coding agent) / Trae (ByteDance IDE). Confirm before scoping.
+Pi supports `session_start` and `session_shutdown` extension events. A manual `sync --scan --agent pi`
+is the supported path in this release; writing an extension is optional and not claimed as completed setup.
 
-## Design consequences
+Primary host references (reviewed 2026-10-19): [Claude hooks](https://code.claude.com/docs/en/hooks),
+[Codex hooks](https://learn.chatgpt.com/docs/hooks), [Hermes hooks](https://hermes-agent.nousresearch.com/docs/user-guide/features/hooks),
+[Pi extensions](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/extensions.md),
+[Cursor hooks](https://cursor.com/docs/agent/hooks).
 
-- **One `AGENTS.md`** is read natively by Codex, Cursor, Pi, Hermes, Amp, OpenCode, Goose, Cline, Kimi,
-  Qwen, Crush → it is the highest-coverage read vector. Claude needs the `CLAUDE.md`→`@AGENTS.md` shim.
-- **One `.agents/skills/read-sessions/`** covers Codex, Cursor, Pi, Amp (and Crush). Claude needs a
-  `.claude/skills/` copy; Hermes needs `~/.hermes/skills/`.
-- **`stop`-class over-firing is fine** because `sync` is idempotent — so Cursor `stop` and Pi scan are
-  safe closers where a clean session-end event is missing.
-- **Do not target internally-managed memory** (Cursor Memories, Codex state-DB): no external write API.
-  Emit `AGENTS.md`/`CLAUDE.md`/`GEMINI.md`-class files instead, which are plain and auto-loaded.
+## Claude plugin
+
+```bash
+claude plugin marketplace add itsMay21/agent-recall
+claude plugin install agent-recall@agent-recall
+```
+
+The plugin uses `node "${CLAUDE_PLUGIN_ROOT}/bin/cli.js"` and needs Node, but no npm dependency.
+It ships a read skill and SessionEnd hook; it does not run the project installer or backfill. Claude
+plugin SessionEnd can have a total budget of 1.5 seconds regardless of the configured timeout. After
+an interrupted hook, catch up with a manual scan. Native-host timing is not certified by our CLI smoke test.
+
+## Manual collection and reading
+
+```bash
+agent-recall sync --scan --cwd /your/project --agent claude-code codex
+agent-recall sync --scan --cwd /your/project --store /private/scratch --subagents full
+agent-recall read --cwd /private/scratch --grep auth --role assistant --last 20
+agent-recall read --cwd /private/scratch --last 20 --offset 20 --json
+```
+
+Here `agent-recall` means the installed CLI invoked with the prefix above. `--store` affects only scan
+output, not the source project. Hook project selection comes from stdin and is checked against native
+`cwd` where present. Hook dispatch accepts an explicit `--agent` because cloud transcript paths can
+be arbitrary. A missing/null transcript path is not guessed to be a Hermes session.
+
+`--subagents calls` is the default: child threads stay in raw detail. `full` includes their index rows;
+`off` skips them. Changing from full to calls/off does not delete rows previously indexed. Reads can
+use `--top-level` or `--subagent-of ID`. Parents with multiple children return all matching children.
+
+## Troubleshooting and upgrading
+
+- **No sessions found:** verify the exact absolute project path and environment overrides. Claude uses
+  `CLAUDE_CONFIG_DIR`; Codex uses `CODEX_HOME`; Hermes uses `HERMES_DIR`; Pi uses `PI_SESSIONS_DIR` or
+  `PI_CODING_AGENT_DIR`; Cursor scan uses `CURSOR_CONFIG_DIR`. Some stores may be remote or unavailable.
+- **Hook exits successfully but nothing appears:** hooks deliberately warn and exit zero. Read stderr,
+  verify the package is installed, then run a manual scan (which returns nonzero on errors).
+- **Busy store:** wait for the current writer and retry. After 60 seconds, a dead/incomplete owner's lock produces a stale-lock diagnostic. Stop all sync
+  processes, remove only that `.agent-recall/.lock` file, and retry. There is no automatic stale-lock
+  deletion because competing reclaimers could remove a new writer's lock. Do not delete a live lock.
+- **Corrupt/shortened store:** preserve a backup, move the entire `.agent-recall` directory aside, and
+  rebuild from original vendor sources. Do not edit rows during sync. Same-length source rewrites are
+  not detected. Recovery repairs only a torn final record, not arbitrary history damage.
+- **Upgrade from private 0.1 builds:** back up the store and rebuild it into a fresh directory. This
+  reruns strengthened redaction over all rows; sync does not retroactively scrub already committed rows.
+  Review and remove any sensitive material from Git history separately. Reinstall hooks to pick up the
+  scoped package command; remove old unscoped `agent-recall sync --from-hook` entries yourself.
+- **Need privacy beyond regex:** keep the entire `.agent-recall/` directory ignored. The index may hold
+  arbitrary PII, private project names, and absolute `cwd` even after known secrets are redacted.
+
+To remove: delete this tool's hook entries, the marked `AGENTS.md` section, installed read-sessions
+skill copies, and any added `CLAUDE.md` import you no longer need; uninstall the local package. Keep or
+remove your store according to your own retention needs. Uninstalling does not erase vendor transcripts
+or sensitive material already committed to Git. Never remove other tools' hook entries or instructions.

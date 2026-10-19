@@ -3,6 +3,21 @@
 All notable changes to agent-recall are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses [SemVer](https://semver.org/).
 
+## 0.2.0 — 2026-10-19
+
+Initial public release, following the private 0.1 prototype.
+
+- Distribute a verified GitHub tarball as `@itsmay21/agent-recall`; the unscoped npm name belongs to an unrelated project.
+- Redact metadata, nested keys and structured credential values; remove typed nested image payloads.
+- Protect raw writes before copying sources, use private POSIX modes, reject unsafe store paths, and preserve custom ignore rules.
+- Deduplicate index identities when raw detail is missing; repair interrupted final appends and expose complete corruption or shortened sources.
+- Keep live locks owned and require offline manual recovery of stale locks; return failures from manual commands while hooks remain non-blocking.
+- Validate CLI args, preserve Codex system-role provenance and absent status, bound reader memory, and emit clean JSONL.
+- Correct hook timeout units and host-specific setup guidance; require Node 22.13 or newer.
+- Add synthetic demo, reproducible benchmark, offline distribution checks, updated dependencies and pinned CI actions.
+
+Current limits: Cursor remains experimental; Pi needs manual sync/an extension; native-host lifecycle checks and coding-agent outcome evaluation remain outside the release evidence. Upgrades from private 0.1 stores should rebuild from original sources to rerun strengthened redaction.
+
 ## [Unreleased]
 
 ### Fixed (HEAD audit `archive/AUDIT-2026-08-16-initial.md` successor)

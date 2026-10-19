@@ -1,10 +1,12 @@
 // Mechanical secret redaction. This is the whole "sanitize" step of the compile path — a single
 // pass over every string field before it reaches the index or the raw sidecar. It is regex-only:
-// no entropy heuristics that could blank whole messages, no LLM. See docs/COMPILE-SPEC.md §3.
+// no entropy heuristics that could blank whole messages, no LLM. See archive/COMPILE-SPEC.md §3.
 //
 // A match is replaced by a marker that preserves structure: «redacted:<label>». Assignment-shaped
 // secrets keep the key name and redact only the value; credentialed URLs keep scheme/host and redact
 // only the password.
+
+const isMarker = (s: string) => /^«redacted:[a-z0-9-]+»$/.test(s);
 
 const MARK = (label: string) => `«redacted:${label}»`;
 
@@ -44,6 +46,7 @@ const TOKEN_RULES: TokenRule[] = [
   },
   { label: "stripe", re: /\b[rs]k_live_[0-9a-zA-Z]{24,}\b/g },
   { label: "gitlab-pat", re: /\bglpat-[0-9A-Za-z_-]{20,}\b/g },
+  { label: "xai", re: /\bxai-[A-Za-z0-9_-]{20,}\b/g },
   { label: "npm", re: /\bnpm_[A-Za-z0-9]{36}\b/g },
   { label: "jwt", re: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g },
 ];
@@ -76,13 +79,33 @@ export function redactString(input: string): RedactResult {
     });
   }
 
-  out = out.replace(ASSIGNMENT_RE, (_m, key: string, sep: string, quote: string | undefined) => {
+  out = out.replace(/\b(Bearer\s+)([^\s"']+)/gi, (match, prefix: string, token: string) => {
+    if (isMarker(token)) return match;
     count++;
-    // group 3 (quote) present ⇒ quoted value: keep the quotes around the marker; else unquoted.
-    return quote ? `${key}${sep}${quote}${MARK("value")}${quote}` : `${key}${sep}${MARK("value")}`;
+    return prefix + MARK("value");
   });
 
-  out = out.replace(URL_CRED_RE, (_m, pre: string, _pw: string, at: string) => {
+  out = out.replace(
+    ASSIGNMENT_RE,
+    (
+      match,
+      key: string,
+      sep: string,
+      quote: string | undefined,
+      quoted: string | undefined,
+      bare: string | undefined,
+    ) => {
+      if (isMarker(quoted ?? bare ?? "")) return match;
+      count++;
+      // group 3 (quote) present ⇒ quoted value: keep the quotes around the marker; else unquoted.
+      return quote
+        ? `${key}${sep}${quote}${MARK("value")}${quote}`
+        : `${key}${sep}${MARK("value")}`;
+    },
+  );
+
+  out = out.replace(URL_CRED_RE, (match, pre: string, pw: string, at: string) => {
+    if (isMarker(pw)) return match;
     count++;
     return `${pre}${MARK("value")}${at}`;
   });
@@ -101,9 +124,28 @@ export function redactDeep<T>(value: T): { value: T; count: number } {
     }
     if (Array.isArray(v)) return v.map(walk);
     if (v && typeof v === "object") {
-      const out: Record<string, unknown> = {};
-      for (const [k, val] of Object.entries(v)) out[k] = walk(val);
-      return out;
+      return Object.fromEntries(
+        Object.entries(v).map(([k, val]) => {
+          const safeKey = redactString(k);
+          count += safeKey.count;
+          const normalized = k.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+          const sensitive =
+            /(?:^|[_-])(?:api[_-]?key|secret|token|password|passwd|pwd|authorization|auth|client[_-]?secret|private[_-]?key|access[_-]?key|connection[_-]?string)$/.test(
+              normalized,
+            );
+          if (
+            sensitive &&
+            val !== null &&
+            val !== undefined &&
+            val !== "" &&
+            !(typeof val === "string" && isMarker(val))
+          ) {
+            count++;
+            return [safeKey.value, MARK("value")];
+          }
+          return [safeKey.value, walk(val)];
+        }),
+      );
     }
     return v;
   };

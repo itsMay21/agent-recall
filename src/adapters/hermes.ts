@@ -36,12 +36,11 @@ const HANDLE_SEP = "::";
 
 function openReadonly(dbPath: string): InstanceType<typeof DatabaseSyncCtor> | null {
   const mod = loadSqlite();
-  if (!mod) return null;
-  try {
-    return new mod.DatabaseSync(dbPath, { readOnly: true });
-  } catch {
-    return null;
-  }
+  if (!mod)
+    throw new Error(
+      "Hermes requires Node >=22.13 with node:sqlite available; upgrade Node or exclude --agent hermes",
+    );
+  return new mod.DatabaseSync(dbPath, { readOnly: true });
 }
 
 interface SessionRow {
@@ -128,8 +127,6 @@ export const hermesAdapter: Adapter = {
         .prepare("SELECT id FROM sessions WHERE cwd = ? AND message_count > 0 ORDER BY started_at")
         .all(opts.cwd) as Array<{ id: string }>;
       return rows.map((r) => `${dbPath}${HANDLE_SEP}${r.id}`);
-    } catch {
-      return [];
     } finally {
       db.close();
     }
@@ -141,6 +138,7 @@ export const hermesAdapter: Adapter = {
     const dbPath = handle.slice(0, idx);
     const sessionId = handle.slice(idx + HANDLE_SEP.length);
 
+    if (!(await exists(dbPath))) return null;
     const db = openReadonly(dbPath);
     if (!db) return null;
     try {
@@ -195,8 +193,6 @@ export const hermesAdapter: Adapter = {
         events,
         sourceFiles: [], // never copy the shared multi-hundred-MB state.db
       };
-    } catch {
-      return null;
     } finally {
       db.close();
     }

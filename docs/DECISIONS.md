@@ -2,6 +2,25 @@
 
 Short, dated records of the load-bearing calls. Newest first.
 
+## ADR-008 — Initial public distribution and reliability contract (2026-10-19)
+
+Use GitHub release tarballs with package identity `@itsmay21/agent-recall`; the unscoped npm name is
+owned by another project. Registry publication is deferred until scope ownership is established.
+Raise the runtime floor to Node 22.13 to support the SQLite adapter without the Node 20 caveat.
+
+Protect raw writes in the compiler, sanitize metadata and structured credentials, and deduplicate
+against persisted index identities independently of raw files. Recover only interrupted final appends;
+fail on complete corruption or shortened sources. Manual failures return nonzero; hooks warn and stay
+non-blocking. Disable automatic stale-lock deletion; concurrent reclaimers cannot safely compare-and-delete a lock
+using these filesystem primitives. Stale-lock recovery requires stopped writers and manual removal.
+Keep same-length source rewriting and native-host lifecycle certification explicit limits.
+
+Correct hook timeout units and host guidance. Pi is manual collection in this release, Cursor remains
+experimental, and research references do not establish this project's effect on agent outcomes.
+
+The records below describe earlier decisions; ADR-008 and current architecture supersede their raw
+line-count, Node 20, unscoped package, and Pi lifecycle claims.
+
 ## ADR-007 — Sub-agent ingestion: tag mechanically, default `calls` (2026-08-16)
 
 **Decision:** Sub-agent / sidechain streams are ingested behind `sync --subagents off|calls|full`,

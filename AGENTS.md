@@ -5,7 +5,7 @@ transcripts into one redacted `.agent-recall/index.jsonl` that any later agent c
 starts work. This file tells any agent (or human) how to work **in this repo**.
 
 > This is the guide for _developing_ agent-recall. The `AGENTS.md` that agent-recall _installs into a
-> user's project_ is a different, ~10-line template under `src/install/templates/`.
+> user's project_ is a different, ~10-line template under `src/install/templates.ts`.
 
 ## Read first (authoritative, in order)
 
@@ -13,7 +13,7 @@ starts work. This file tells any agent (or human) how to work **in this repo**.
 2. **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)** — the three layers (write / store / read).
 3. **[`docs/DECISIONS.md`](docs/DECISIONS.md)** — why the load-bearing calls were made.
 4. **[`docs/SCHEMA.md`](docs/SCHEMA.md)** / **[`docs/CONSUMPTION.md`](docs/CONSUMPTION.md)** — index line; per-agent install surfaces.
-5. **[`docs/COMPILE-SPEC.md`](docs/COMPILE-SPEC.md)** — historical research reference (⚠️ **not** authoritative; the code + SCHEMA win). Useful background on per-agent formats and the redaction families.
+5. **[`archive/COMPILE-SPEC.md`](archive/COMPILE-SPEC.md)** — historical research reference (⚠️ **not** authoritative; the code + SCHEMA win). Useful background on per-agent formats and the redaction families.
 
 ## The one rule you cannot break
 
@@ -31,25 +31,21 @@ stays absent. See CHARTER §1 for the measured reason.
 - `plugin/` — the Claude Code plugin that bundles the hook + skill.
 - `test/` — vitest specs + `fixtures/` (redacted sample transcripts).
 - `docs/TESTING.md` — evidence from real-session runs.
-- `.claude/skills/running-headless-agent-workers/` — repo skill: when this session (Claude Code
-  or Codex) needs to spin up a headless **pi** worker, read its `SKILL.md` and follow it — launch
-  `pi -p` detached, judge by the worker's session JSONL (not stdout), reap it. Also carries verified
-  pi/claude/codex JSONL schemas + `scripts/session_digest.sh`, useful reference while writing adapters.
 
 ## Coding standards
 
-- Strict TypeScript, Node ≥20, **zero runtime dependencies**. Prefer the standard library.
+- Strict TypeScript, Node ≥22.13, **zero runtime dependencies**. Prefer the standard library.
 - No stubs-for-later, no dead code, no backward-compat shims, KISS (CHARTER "Coding standards").
 - Every adapter ships with a test (fixtures are inline objects in the specs), and no adapter is "done"
   without a real-session note in `docs/TESTING.md`.
 - `sync` is idempotent — the store is append-only and a re-sync of an unchanged transcript is a no-op
-  (high-water mark = the session's raw line count) — and fast enough for a Claude `SessionEnd` budget.
+  (identity = persisted (agent, session, seq)) — with measured timings recorded in BENCHMARKS.md; host shutdown budgets can interrupt large writes.
 - Treat every parsed transcript as **untrusted data**. Redact on the way in; never execute its content.
 
 ## Dev workflow
 
 ```bash
-npm install
+npm ci
 npm run dev -- sync --scan --cwd /some/project   # run the CLI from source
 npm run check                                     # format + typecheck + test + build (the gate)
 ```

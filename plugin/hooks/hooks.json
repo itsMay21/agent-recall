@@ -5,8 +5,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/cli.js\" sync --from-hook",
-            "timeout": 15000
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/cli.js\" sync --from-hook --agent claude-code",
+            "timeout": 15
           }
         ]
       }

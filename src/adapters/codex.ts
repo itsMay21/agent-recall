@@ -58,7 +58,9 @@ function responseItemToEvent(payload: Record<string, unknown>, ts?: string): Raw
   const type = payload["type"];
   switch (type) {
     case "message": {
-      const role = payload["role"] === "assistant" ? "assistant" : "user";
+      const nativeRole = payload["role"];
+      const role =
+        nativeRole === "assistant" ? "assistant" : nativeRole === "user" ? "user" : "system";
       const text = codexText(payload["content"]);
       return text ? { role, text, ...withTs } : null;
     }
@@ -84,13 +86,19 @@ function responseItemToEvent(payload: Record<string, unknown>, ts?: string): Raw
         typeof output === "string"
           ? output
           : codexText((output as Record<string, unknown>)?.["content"]);
-      const isError =
-        (output &&
-          typeof output === "object" &&
-          (output as Record<string, unknown>)["success"] === false) ||
-        false;
-      const status: Status = isError ? "error" : "ok";
-      return { role: "tool", status, ...(text ? { text } : {}), result: output, ...withTs };
+      const success =
+        output && typeof output === "object"
+          ? (output as Record<string, unknown>)["success"]
+          : undefined;
+      const status: Status | undefined =
+        typeof success === "boolean" ? (success ? "ok" : "error") : undefined;
+      return {
+        role: "tool",
+        ...(status ? { status } : {}),
+        ...(text ? { text } : {}),
+        result: output,
+        ...withTs,
+      };
     }
     default:
       return null;

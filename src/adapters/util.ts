@@ -25,7 +25,9 @@ export async function* readJsonl(file: string): AsyncGenerator<Record<string, un
     const t = line.trim();
     if (t === "") continue;
     try {
-      yield JSON.parse(t) as Record<string, unknown>;
+      const value: unknown = JSON.parse(t);
+      if (value && typeof value === "object" && !Array.isArray(value))
+        yield value as Record<string, unknown>;
     } catch {
       // tolerate a bad line rather than aborting the whole transcript
     }

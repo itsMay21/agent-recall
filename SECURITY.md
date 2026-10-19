@@ -1,35 +1,33 @@
-# Security Policy
+# Security policy
 
-agent-recall ingests coding-agent transcripts, which routinely contain secrets (API keys, tokens,
-PEM blocks, credentialed URLs). Security is therefore a first-class concern.
+Agent Recall reads local coding-agent transcripts. They can contain credentials, personal data,
+private source code, employer/client information, and hostile instructions.
 
-## What the tool guarantees
+## Boundaries
 
-- **Redaction on write.** Every string that reaches the committable index or the raw sidecar passes
-  through mechanical, regex-based redaction (`src/sync/redact.ts`) covering common token families,
-  assignment-shaped secrets, and credentialed URLs, followed by a home-path scrub
-  (`src/sync/scrub.ts`). Redaction is lossy and one-way in the index.
-- **Raw is never committed.** `.agent-recall/raw/` (verbatim, pre-redaction vendor bytes) is
-  gitignored by `install`. Only the redacted `index.jsonl` is intended to be committable.
-- **No execution.** Transcript content is data, never executed; there is no `eval`, shell-out, or
-  network call in the compile path.
+- No network, shell execution, model calls, or telemetry in the compiler. Transcript content is data.
+- Known token patterns, assignment-shaped secrets, structured credential values, nested object keys,
+  and metadata are redacted before index/sanitized detail writes. Typed nested images become envelopes.
+- Verbatim sources in `raw/` retain original bytes and may contain secrets. Direct sync and plugin
+  use create store-local ignore rules before copying raw. POSIX directories/files use `0700`/`0600`.
+- `cwd` retains the absolute project path. Unknown token formats, arbitrary PII, company names, and
+  private code are not comprehensively detected. Review the index before sharing. Keep the whole store
+  ignored if your project's privacy policy requires it.
+- Ignore rules do not untrack an already committed file, prevent `git add -f`, or protect an index
+  already present in Git history. Redaction updates are not retroactive; rebuild stores when upgrading.
+- A lock serializes cooperative writers and repairs interrupted final appends. This is not a database
+  transaction or a sandbox. Same-user malicious processes, edited/reordered transcripts, deliberate
+  filesystem races, hardware loss, and arbitrary source schema changes are outside its guarantees.
+- The read skill tells consumers to treat history as untrusted evidence. It cannot enforce model
+  behavior or prevent every prompt-injection response.
 
-## Known limitations
+Supported fixes target the latest release (currently 0.2.x). Windows is not validated. Host schemas
+and experimental hooks may change; use manual sync and inspect diagnostics when automation fails.
 
-Redaction is pattern-based, not exhaustive. It will not catch every secret shape (e.g. a bespoke
-token format, a secret with no surrounding key word, or PII that isn't a known pattern). **Review an
-index before committing it to a public repository.** Never force-add `.agent-recall/raw/` or a vendor
-transcript to git.
+## Report privately
 
-## Reporting a vulnerability
-
-If you find a way to make agent-recall leak a secret into the index, execute transcript content, or
-corrupt the store, please report it privately:
-
-- Open a **GitHub Security Advisory** (Security → Advisories → Report a vulnerability) on this repo
-  (preferred), or
-- contact the maintainer [@itsMay21](https://github.com/itsMay21) on GitHub.
-
-Please include a minimal reproduction (a synthetic, non-real secret shape is fine — do **not** send
-real credentials). We aim to acknowledge within a few days. Do not open a public issue for a
-secret-leak vulnerability until a fix is released.
+Use [GitHub private vulnerability reporting](https://github.com/itsMay21/agent-recall/security/advisories/new).
+Include a minimal synthetic reproduction and affected version. Do not upload real credentials,
+transcripts, client data, or employer material. If the private reporting form is unavailable, contact
+[@itsMay21](https://github.com/itsMay21) to arrange a private report without posting the vulnerability
+in a public issue. Response time depends on maintainer availability; no service-level guarantee is made.

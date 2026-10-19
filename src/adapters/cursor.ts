@@ -5,7 +5,7 @@
 // text plus a pointer, and never invents tool arguments. Session id = filename stem; ts = file mtime.
 //
 // NOTE: untested against a live Cursor install on the build machine (no ~/.cursor present). Schema is
-// from official/community reports; see docs/CONSUMPTION.md and docs/COMPILE-SPEC.md.
+// from official/community reports; see docs/CONSUMPTION.md and archive/COMPILE-SPEC.md.
 
 import { basename, join } from "node:path";
 import { readdir } from "node:fs/promises";

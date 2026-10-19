@@ -9,12 +9,12 @@ in the compile path.** `sync` parses, redacts, and indexes; it never summarizes 
 Every change must pass before it's merged:
 
 ```bash
-npm install
+npm ci
 npm run check      # prettier + tsc --noEmit + vitest + tsup build
 npm run build:plugin
 ```
 
-CI (`.github/workflows/ci.yml`) runs the same on Node 20 and 22.
+CI runs this gate, a dependency audit, and a history secret scan on macOS/Linux with Node 22 and 24.
 
 ## Adding or changing an adapter
 
@@ -28,12 +28,12 @@ Adapters live in `src/adapters/<agent>.ts` and implement the `Adapter` contract
 3. It has a real-session evidence note in [`docs/TESTING.md`](docs/TESTING.md) (counts, timing, and
    a redaction/JSON-validity check — no secrets or real transcript bodies).
 
-See [`docs/COMPILE-SPEC.md`](docs/COMPILE-SPEC.md) for per-agent formats and the redaction spec, and
+See [`archive/COMPILE-SPEC.md`](archive/COMPILE-SPEC.md) for per-agent formats and the redaction spec, and
 [`docs/CONSUMPTION.md`](docs/CONSUMPTION.md) for how each agent installs.
 
 ## Coding standards
 
-Strict TypeScript, Node ≥20, **zero runtime dependencies** (standard library only — dev tooling is
+Strict TypeScript, Node ≥22.13, **zero runtime dependencies** (standard library only — dev tooling is
 fine). No stubs-for-later, no dead code, no backward-compat shims, KISS. Treat every parsed transcript
 as untrusted input: redact on the way in, never execute its content.
 
@@ -47,3 +47,14 @@ safety, home-path scrub) needs a canary test proving the new shape is caught, in
 
 Small, focused commits with a clear message. Fill in the PR template. Reference any finding id
 (e.g. `F-1.1`) or issue you're addressing.
+
+## Release and attribution
+
+Use only synthetic fixtures, never live transcripts or employer/client material. Contributions are
+submitted under the repository's MIT license; disclose any third-party source and preserve its notice.
+See [provenance](docs/PROVENANCE.md). Report vulnerabilities privately as described in SECURITY.md.
+
+Before a release, follow [the release checklist](docs/RELEASE-READINESS.md). Build and install the
+actual tarball, run the offline hook smoke check, inspect contents, audit dependencies and history,
+and obtain independent review. Publish GitHub assets first; npm publishing requires separately
+established scope ownership. Do not use the unrelated unscoped package name.
