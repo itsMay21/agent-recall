@@ -1,7 +1,7 @@
 // `agent-recall install` — wire the read layer (AGENTS.md pointer + read-sessions skill) and the
 // write layer (session-close hooks) into a project. Idempotent and conservative: it never rewrites a
 // user's existing content, only appends a marked section or merges a hook entry. Agents whose closer
-// needs user consent (Hermes) or has no session-end event (Pi) get printed guidance instead of a
+// needs user consent (Hermes) or a user-provided lifecycle extension (Pi) get printed guidance instead of a
 // silent config edit.
 
 import { fileURLToPath } from "node:url";
@@ -31,7 +31,8 @@ async function exists(p: string): Promise<boolean> {
 async function readOr(p: string, fallback = ""): Promise<string> {
   try {
     return await readFile(p, "utf8");
-  } catch {
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
     return fallback;
   }
 }
@@ -111,7 +112,7 @@ async function installClaudeHook(projectDir: string): Promise<void> {
     } catch {
       log(`WARNING: ${file} is not valid JSON; leaving it and printing the hook to add manually`);
       log(
-        `  add under hooks.SessionEnd: { "hooks": [ { "type": "command", "command": "${HOOK_CMD}", "timeout": 15000 } ] }`,
+        `  add under hooks.SessionEnd: { "hooks": [ { "type": "command", "command": "${HOOK_CMD}", "timeout": 15 } ] }`,
       );
       return;
     }
@@ -120,7 +121,9 @@ async function installClaudeHook(projectDir: string): Promise<void> {
   const sessionEnd = (hooks["SessionEnd"] as unknown[]) ?? [];
   const already = JSON.stringify(sessionEnd).includes(HOOK_CMD);
   if (!already) {
-    sessionEnd.push({ hooks: [{ type: "command", command: HOOK_CMD, timeout: 15000 }] });
+    sessionEnd.push({
+      hooks: [{ type: "command", command: HOOK_CMD + " --agent claude-code", timeout: 15 }],
+    });
   }
   hooks["SessionEnd"] = sessionEnd;
   settings["hooks"] = hooks;
@@ -153,7 +156,9 @@ async function installCodexHook(projectDir: string): Promise<void> {
   const sessionEnd = (hooks["SessionEnd"] as unknown[]) ?? [];
   // Codex caps SessionEnd at ~3s (1s default); a per-session sync is sub-second once warm.
   if (!JSON.stringify(sessionEnd).includes(HOOK_CMD)) {
-    sessionEnd.push({ hooks: [{ type: "command", command: HOOK_CMD, timeout: 3000 }] });
+    sessionEnd.push({
+      hooks: [{ type: "command", command: HOOK_CMD + " --agent codex", timeout: 3 }],
+    });
   }
   hooks["SessionEnd"] = sessionEnd;
   cfg["hooks"] = hooks;
@@ -183,7 +188,8 @@ async function installCursorHook(projectDir: string): Promise<void> {
   // sessionEnd (IDE) + stop (cloud-safe) — both idempotent because sync dedupes.
   for (const evt of ["sessionEnd", "stop"]) {
     const arr = (hooks[evt] as unknown[]) ?? [];
-    if (!JSON.stringify(arr).includes(HOOK_CMD)) arr.push({ command: HOOK_CMD, type: "command" });
+    if (!JSON.stringify(arr).includes(HOOK_CMD))
+      arr.push({ command: HOOK_CMD + " --agent cursor", type: "command" });
     hooks[evt] = arr;
   }
   cfg["hooks"] = hooks;
@@ -212,6 +218,34 @@ export async function runInstall(args: string[]): Promise<void> {
     return;
   }
 
+  // Validate existing configuration before writing any project files.
+  for (const agent of agents) {
+    const relative =
+      agent === "claude-code"
+        ? ".claude/settings.json"
+        : agent === "codex"
+          ? ".codex/hooks.json"
+          : agent === "cursor"
+            ? ".cursor/hooks.json"
+            : undefined;
+    if (!relative) continue;
+    const text = await readOr(join(projectDir, relative));
+    if (!text.trim()) continue;
+    const value: unknown = JSON.parse(text);
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw new Error(`invalid hook configuration: ${relative}`);
+    const hooks = (value as Record<string, unknown>)["hooks"];
+    if (hooks !== undefined) {
+      if (!hooks || typeof hooks !== "object" || Array.isArray(hooks))
+        throw new Error(`invalid hooks object: ${relative}`);
+      for (const event of ["SessionEnd", "sessionEnd", "stop"]) {
+        const entries = (hooks as Record<string, unknown>)[event];
+        if (entries !== undefined && !Array.isArray(entries))
+          throw new Error(`invalid ${event} array: ${relative}`);
+      }
+    }
+  }
+  await mkdir(projectDir, { recursive: true });
   log(`installing for: ${agents.join(", ")} in ${projectDir}`);
 
   // Read layer (shared): AGENTS.md pointer + a .agents/skills copy (covers Codex/Cursor/Pi/Amp).
@@ -245,16 +279,14 @@ export async function runInstall(args: string[]): Promise<void> {
           "Hermes: session-end hooks are user-level and need your consent. Add to ~/.hermes/config.yaml:",
         );
         log(
-          `  hooks: { on_session_end: "${HOOK_CMD}" }   then run: hermes hooks list  (approve in ~/.hermes/shell-hooks-allowlist.json)`,
+          `  hooks: { on_session_end: [{ command: "${HOOK_CMD} --agent hermes", timeout: 15 }] }   then run: hermes hooks list  (approve in ~/.hermes/shell-hooks-allowlist.json)`,
         );
         break;
       }
       case "pi":
+        log("Pi: run `agent-recall sync --scan` manually, or use a Pi");
         log(
-          "Pi has no session-end event. Run `agent-recall sync --scan` at session start, or add a Pi",
-        );
-        log(
-          "  extension on `agent_start` that shells out to it. AGENTS.md already points Pi at the store.",
+          "  extension on `session_start` / `session_shutdown` that runs it. No extension is installed.",
         );
         break;
     }
@@ -269,14 +301,22 @@ export async function runInstall(args: string[]): Promise<void> {
   } else {
     log("backfilling existing sessions for this project…");
     const home = process.env.HOME || process.env.USERPROFILE || "";
+    let failures = 0;
     const results = await scanAndCompile({
       cwd: projectDir,
       storeDir: projectDir,
       home,
       env: process.env,
       agents,
-      onError: (m) => log(m),
+      onError: (m) => {
+        failures++;
+        log(m);
+      },
     });
+    if (failures)
+      throw new Error(
+        `backfill had ${failures} failure(s); fix the reported errors and run sync --scan again`,
+      );
     const added = results.reduce((n, r) => n + r.added, 0);
     const sessions = results.filter((r) => r.added > 0).length;
     log(
@@ -284,9 +324,9 @@ export async function runInstall(args: string[]): Promise<void> {
     );
   }
 
-  log("done. New sessions will sync on close.");
   log(
-    "NOTE: the hooks run `npx --no-install agent-recall …` — install the binary locally so they resolve:",
+    "done. Review the host-specific activation instructions above; Pi needs manual sync or an extension.",
   );
-  log("  npm i -D agent-recall   (or install globally / use the Claude Code plugin)");
+  log("The hooks require the local @itsmay21/agent-recall release package in this project.");
+  log("  npm install --save-dev /path/to/itsmay21-agent-recall-0.2.0.tgz");
 }

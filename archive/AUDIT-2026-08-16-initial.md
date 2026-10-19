@@ -112,7 +112,7 @@ CLI usage (`src/cli.ts:182`) documents `install [--user]`; `runInstall` parses o
 - **F-2.2 `sanitizeSegment` collisions corrupt the high-water mark.** `store.ts:27-29` maps any non-`[A-Za-z0-9._-]` char to `-` and truncates to 200. Two distinct session ids that differ only in replaced characters (or beyond byte 200) share one raw dir → one shared `events.jsonl` → interleaved events from two sessions and a garbage high-water mark. Low probability with UUID-shaped ids, nonzero with hermes/other schemes.
   **Fix:** when sanitization changes the string, append a short hash of the original id.
 - **F-2.3 Spec's `aws-secret` pattern was never implemented.** COMPILE-SPEC §3.1 promises `(?i)aws.{0,20}?['"][0-9a-zA-Z/+]{40}['"]`; `redact.ts` has no such rule. A bare 40-char AWS secret key (no assignment-shaped key word adjacent) passes through unredacted — the assignment regex can't match inside it either. Security-relevant spec gap. All 14 _other_ spec patterns are implemented.
-- **F-2.4 Home-path leakage at scale in the "committable" index.** Real-data counts of previews containing `/Users/yakman`: Claude 196/486, Codex 64/495, Pi 1022/3630, Hermes 134+ (strict count blocked by F-0.2). The `cwd` field legitimately carries the absolute path, but previews reproduce it in ~30–50% of lines — usernames and project layout ship to whatever repo commits the index.
+- **F-2.4 Home-path leakage at scale in the "committable" index.** Real-data counts of previews containing `/Users/example`: Claude 196/486, Codex 64/495, Pi 1022/3630, Hermes 134+ (strict count blocked by F-0.2). The `cwd` field legitimately carries the absolute path, but previews reproduce it in ~30–50% of lines — usernames and project layout ship to whatever repo commits the index.
   **Fix (policy decision):** mechanically replace `$HOME` prefix with `~` in preview/text/raw strings (keep `cwd` intact), or explicitly document the index as machine-local.
 - **F-2.5 Codex SessionEnd timeout is out of spec.** Installer writes `timeout: 15000` for `.codex/hooks.json`, but current Codex docs cap SessionEnd at **3 s (1 s default)**; the hook can be killed mid-compile → torn writes (see F-1.5). Codex hooks also currently require opting in (`codex -c features.codex_hooks=true`) — unmentioned by the installer.
   **Fix:** use ≤3000 for Codex (sync is sub-second per session once warm), and print the feature-flag note in install output.
@@ -139,7 +139,7 @@ CLI usage (`src/cli.ts:182`) documents `install [--user]`; `runInstall` parses o
 
 - **F-2.13** No CONTRIBUTING.md, SECURITY.md, CHANGELOG.md, `.github/ISSUE_TEMPLATE/`, or PR template. SECURITY matters disproportionately here: the tool ingests transcripts containing secrets.
 - **F-2.14** No `prepublishOnly` — `npm publish` isn't forced through `npm run check`.
-- **F-2.15** Personal path in tracked files: `docs/TESTING.md:31-33` embeds `/Users/yakman` (twice).
+- **F-2.15** Personal path in tracked files: `docs/TESTING.md:31-33` embeds `/Users/example` (twice).
 - **F-2.16** AGENTS.md's uncommitted edit references `.claude/skills/running-headless-agent-workers/`, which `.gitignore:20` (`.claude/`) keeps out of the repo — cloners are told to read a file that won't exist. Force-add the skill (with a `!.claude/skills/` exception) or drop the reference.
 - **F-2.17** No git tags (should have `v0.1.0`); main has 2 commits; AGENTS.md's "CI runs the same gate" slightly overclaims (CI is a superset — adds `build:plugin`).
 - **F-2.18** README as a landing page: no CI badge (add post-public), no concrete plugin install command (`claude plugin marketplace add itsMay21/agent-recall` + `claude plugin install agent-recall@agent-recall`), and "writes the session-close hook config … for each named agent" overstates Hermes/Pi (guidance text only).
@@ -166,7 +166,7 @@ CLI usage (`src/cli.ts:182`) documents `install [--user]`; `runInstall` parses o
 | ----------- | ------------------------------------------------------------------------ | -------- | ------------- | --------------------- | --------- | ------------------------------------------------------------------ |
 | claude-code | `~/.claude/projects/-Users-yakman-Projects-agent-recall/` (2.3 MB JSONL) | 1        | 486           | 9                     | 1.0 s     | 0 added ✓                                                          |
 | codex       | `~/.codex/sessions/**` (2 rollouts)                                      | 2        | 495           | 2                     | 1.5 s     | —                                                                  |
-| pi          | `~/.pi/agent/sessions/--Users-yakman-Projects-relay-dev--/`              | 15       | 3,630         | 179                   | 3.4 s     | +7 events from a live-growing session ✓ (incremental append exact) |
+| pi          | `~/.pi/agent/sessions/--Users-yakman-Projects-example-project--/`        | 15       | 3,630         | 179                   | 3.4 s     | +7 events from a live-growing session ✓ (incremental append exact) |
 | hermes      | `~/.hermes/state.db` (610 MB SQLite; 51 cwd-matching sessions of 182)    | 51       | 24,522        | 312                   | 8.3 s     | 0 added ✓ (14.3 s no-op cost)                                      |
 
 Per-agent notes from the produced indexes:

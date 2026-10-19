@@ -28,7 +28,7 @@ Two layouts coexist:
      `['agentId','cwd','entrypoint','gitBranch','isSidechain','message','parentUuid','promptId','sessionId','timestamp','type','userType','uuid','version']`.
 
 2. **Inline sidechain lines (older layout):** some sessions in
-   `~/.claude/projects/-Users-yakman-Projects-relay-dev/` embed `isSidechain` lines directly in the
+   `~/.claude/projects/-Users-yakman-Projects-example-project/` embed `isSidechain` lines directly in the
    single `<sessionId>.jsonl` (all lines `isSidechain: false` in the file checked here, but the
    field exists machine-wide; older builds wrote `true` lines inline).
 
@@ -87,7 +87,7 @@ Two layers:
 2. **Sub-agent artifacts (pi-subagents extension):** sibling directory
    `~/.pi/agent/sessions/<mangled-cwd>/subagent-artifacts/` with per-run quadruples:
    `<runId>_<agent>_<idx>_input.md`, `_meta.json`, `_output.md`, `_transcript.jsonl`
-   (verified: `--Users-yakman-Projects-relay-dev--/subagent-artifacts/06777f03_reviewer_0_*`).
+   (verified: `--Users-yakman-Projects-example-project--/subagent-artifacts/06777f03_reviewer_0_*`).
    - `_transcript.jsonl` records are self-describing:
      `{"version":1,"recordType":"message","source":"foreground","runId":"06777f03","agent":"reviewer","childIndex":0,"cwd","ts","timestamp","sourceEventType","role","text"}` —
      so run id, agent name, and child index are **native typed fields**.
@@ -254,7 +254,7 @@ parent/spawnKey`) carrying `origin: "subagent"`, `parent`, `subagentKind`. Consu
    dedupe across both Claude layouts, dangling parent, ambiguous-Pi-parent omission.
 7. **docs/TESTING.md**: add a real-session note citing the exact files above (paths under
    `~/.claude/projects/-Users-yakman-Projects-agent-recall/…`, `~/.codex/sessions/2026/08/13/…`,
-   `~/.pi/agent/sessions/--Users-yakman-Projects-relay-dev--/subagent-artifacts/…`), per the
+   `~/.pi/agent/sessions/--Users-yakman-Projects-example-project--/subagent-artifacts/…`), per the
    "no adapter done without a real-session note" rule.
 8. **Cursor**: no work until verifiable — needs a machine with Cursor installed; until then the
    adapter keeps its existing behavior and SCHEMA.md marks sub-agent fields "not on disk /

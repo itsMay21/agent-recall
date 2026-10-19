@@ -7,14 +7,16 @@ import { join } from "node:path";
 import type { ParsedSession, IndexLine, RawEventLine, RawEvent } from "./types.js";
 import { redactString, redactDeep } from "./redact.js";
 import { previewOf, scrubString, scrubDeep } from "./scrub.js";
-import { toEnvelopes } from "./images.js";
+import { stripInlineAttachments, toEnvelopes } from "./images.js";
 import {
   storePaths,
   sessionRawDir,
   sanitizeSegment,
   countLines,
-  countSessionIndexRows,
-  readRawRange,
+  sessionIndexSequences,
+  safeSessionId,
+  prepareStore,
+  recoverJsonl,
   ensureDir,
   appendJsonl,
   copySources,
@@ -44,6 +46,7 @@ export interface CompileResult {
   redacted: number;
   /** index rows regenerated from raw because a previous run was torn between the two appends. */
   reconciled: number;
+  rawOnly: boolean;
 }
 
 const PREVIEW_MAX = 200;
@@ -56,14 +59,20 @@ function buildLines(
   home: string,
   rawPointer: string,
 ): { index: IndexLine; raw: RawEventLine; redacted: number } {
-  const tsGiven = ev.ts && ev.ts.length > 0;
+  const tsGiven = typeof ev.ts === "string" && Number.isFinite(Date.parse(ev.ts));
   const ts = tsGiven ? (ev.ts as string) : fallbackTs;
 
   // Redact secrets first, then scrub (home paths + JSON-safe surrogates). Count secret spans once,
   // over the full text/args/result — the preview is derived from the already-redacted text.
   const textR = ev.text === undefined ? { value: undefined, count: 0 } : redactString(ev.text);
-  const argsR = ev.args === undefined ? { value: undefined, count: 0 } : redactDeep(ev.args);
-  const resultR = ev.result === undefined ? { value: undefined, count: 0 } : redactDeep(ev.result);
+  const argsR =
+    ev.args === undefined
+      ? { value: undefined, count: 0 }
+      : redactDeep(stripInlineAttachments(ev.args));
+  const resultR =
+    ev.result === undefined
+      ? { value: undefined, count: 0 }
+      : redactDeep(stripInlineAttachments(ev.result));
   const redacted = textR.count + argsR.count + resultR.count;
 
   const preview = textR.value !== undefined ? previewOf(textR.value, home, PREVIEW_MAX) : "";
@@ -71,121 +80,120 @@ function buildLines(
   const safeArgs = argsR.value !== undefined ? scrubDeep(argsR.value, home) : undefined;
   const safeResult = resultR.value !== undefined ? scrubDeep(resultR.value, home) : undefined;
 
+  const metadata = redactDeep({
+    ts,
+    session: safeSessionId(parsed.session, home),
+    cwd: parsed.cwd,
+    gitBranch: parsed.gitBranch,
+    subagentOf: parsed.subagentOf ? safeSessionId(parsed.subagentOf, home) : undefined,
+    subagentKind: parsed.subagentKind,
+    name: ev.name,
+    nativeType: ev.nativeType,
+  });
+  const safe = scrubDeep(metadata.value, home);
+  const identityRedactions =
+    redactString(parsed.session).count +
+    (parsed.subagentOf ? redactString(parsed.subagentOf).count : 0);
   const index: IndexLine = {
     v: 1,
-    ts,
+    ts: safe.ts,
     agent: parsed.agent,
-    session: parsed.session,
+    session: safe.session,
     seq,
     role: ev.role,
-    ...(parsed.cwd ? { cwd: parsed.cwd } : {}),
-    ...(parsed.gitBranch ? { git_branch: parsed.gitBranch } : {}),
+    ...(metadata.value.cwd ? { cwd: scrubString(metadata.value.cwd, "") } : {}),
+    ...(safe.gitBranch ? { git_branch: safe.gitBranch } : {}),
     ...(parsed.origin ? { origin: parsed.origin } : {}),
-    ...(parsed.subagentOf ? { subagent_of: parsed.subagentOf } : {}),
-    ...(parsed.subagentKind ? { subagent_kind: parsed.subagentKind } : {}),
-    ...(ev.name ? { name: ev.name } : {}),
+    ...(safe.subagentOf ? { subagent_of: safe.subagentOf } : {}),
+    ...(safe.subagentKind ? { subagent_kind: safe.subagentKind } : {}),
+    ...(safe.name ? { name: safe.name } : {}),
     ...(ev.status ? { status: ev.status } : {}),
     ...(preview ? { preview } : {}),
     raw: rawPointer,
     ...(tsGiven ? {} : { ts_source: "mtime" as const }),
-    ...(redacted > 0 ? { redacted } : {}),
+    ...(redacted + metadata.count + identityRedactions > 0
+      ? { redacted: redacted + metadata.count + identityRedactions }
+      : {}),
   };
 
-  const envelopes = toEnvelopes(ev.attachments);
+  const envelopes = scrubDeep(redactDeep(toEnvelopes(ev.attachments)).value, home);
   const raw: RawEventLine = {
     ...index,
     ...(safeText !== undefined ? { text: safeText } : {}),
     ...(safeArgs !== undefined ? { args: safeArgs } : {}),
     ...(safeResult !== undefined ? { result: safeResult } : {}),
     ...(envelopes ? { attachments: envelopes } : {}),
-    ...(ev.nativeType ? { native_type: ev.nativeType } : {}),
+    ...(safe.nativeType ? { native_type: safe.nativeType } : {}),
   };
 
-  return { index, raw, redacted };
+  return { index, raw, redacted: redacted + metadata.count + identityRedactions };
 }
 
-/** A raw sidecar line is the index line plus extra fields; strip them to recover the index row. */
-function rawToIndex(row: Record<string, unknown>): Record<string, unknown> {
-  const { text, args, result, attachments, native_type, ...index } = row;
-  void text;
-  void args;
-  void result;
-  void attachments;
-  void native_type;
-  return index;
-}
-
-/**
- * Compile one parsed session into the store, under an exclusive lock. Idempotent: only events beyond
- * the raw high-water mark are appended. If a previous run was killed between the raw append and the
- * index append (F-1.5), the missing index rows are first regenerated mechanically from the raw
- * sidecar so no row is lost.
- */
+/** Compile under one store lock. Recover torn suffixes, and dedupe by persisted index identities
+ * independently of raw files, which may be absent after cloning or deliberate local cleanup. */
 export async function compileSession(
   parsed: ParsedSession,
   opts: CompileOptions,
 ): Promise<CompileResult> {
   const paths = storePaths(opts.projectDir);
-  const rawDir = sessionRawDir(paths, parsed.agent, parsed.session);
-  const rawEventsFile = join(rawDir, "events.jsonl");
-
-  await ensureDir(paths.root);
+  await prepareStore(paths);
   const lock = await acquireLock(paths.root);
   try {
-    const rawCount = await countLines(rawEventsFile);
+    const rawDir = sessionRawDir(paths, parsed.agent, parsed.session, opts.home ?? "");
+    await ensureDir(paths.rawDir);
+    await ensureDir(join(paths.rawDir, parsed.agent));
+    await ensureDir(rawDir);
+    const rawEventsFile = join(rawDir, "events.jsonl");
+    await recoverJsonl(rawEventsFile);
+    await recoverJsonl(paths.index);
+    const identity = safeSessionId(parsed.session, opts.home ?? "");
+    const rawCount = await countLines(rawEventsFile, parsed.agent, identity);
     const rawOnly = opts.rawOnly === true;
-
-    // Reconcile a torn previous write: raw has more rows than the index for this session. Skipped in
-    // rawOnly mode (there are, by design, no index rows for this session to reconcile).
-    let reconciled = 0;
-    if (!rawOnly) {
-      const idxCount = await countSessionIndexRows(paths.index, parsed.agent, parsed.session);
-      if (idxCount < rawCount) {
-        const missing = await readRawRange(rawEventsFile, idxCount, rawCount);
-        await appendJsonl(paths.index, missing.map(rawToIndex));
-        reconciled = missing.length;
-      }
-    }
-
+    const indexedSeqs = await sessionIndexSequences(paths.index, parsed.agent, identity);
     const total = parsed.events.length;
-    if (total <= rawCount) {
-      return {
-        agent: parsed.agent,
-        session: parsed.session,
-        added: 0,
-        indexed: 0,
-        skipped: total,
-        redacted: 0,
-        reconciled,
-      };
+    if (total < rawCount || [...indexedSeqs].some((seq) => seq >= total)) {
+      throw new Error(
+        "transcript shrank or session id was reused; rebuild this store from the original transcripts",
+      );
     }
-
-    await copySources(rawDir, parsed.sourceFiles);
-
     const indexRows: IndexLine[] = [];
     const rawRows: RawEventLine[] = [];
     let redacted = 0;
-    for (let seq = rawCount; seq < total; seq++) {
-      const ev = parsed.events[seq]!;
-      const rawPointer = `raw/${parsed.agent}/${sanitizeSegment(parsed.session)}/events.jsonl#${seq}`;
-      const built = buildLines(parsed, ev, seq, opts.fallbackTs, opts.home ?? "", rawPointer);
-      indexRows.push(built.index);
-      rawRows.push(built.raw);
+    let reconciled = 0;
+    let indexed = 0;
+    for (let seq = 0; seq < total; seq++) {
+      const needsRaw = seq >= rawCount;
+      const needsIndex = !rawOnly && !indexedSeqs.has(seq);
+      if (!needsRaw && !needsIndex) continue;
+      const pointer = `raw/${parsed.agent}/${sanitizeSegment(identity)}/events.jsonl#${seq}`;
+      const built = buildLines(
+        parsed,
+        parsed.events[seq]!,
+        seq,
+        opts.fallbackTs,
+        opts.home ?? "",
+        pointer,
+      );
+      if (needsRaw) rawRows.push(built.raw);
+      if (needsIndex) {
+        indexRows.push(built.index);
+        if (seq < rawCount) reconciled++;
+        else indexed++;
+      }
       redacted += built.redacted;
     }
-
-    // Raw first (superset, so a tear is recoverable via reconcile), then index (unless rawOnly).
+    if (rawRows.length) await copySources(rawDir, parsed.sourceFiles);
     await appendJsonl(rawEventsFile, rawRows);
-    if (!rawOnly) await appendJsonl(paths.index, indexRows);
-
+    await appendJsonl(paths.index, indexRows);
     return {
       agent: parsed.agent,
-      session: parsed.session,
+      session: identity,
       added: rawRows.length,
-      indexed: rawOnly ? 0 : indexRows.length,
-      skipped: rawCount,
+      indexed,
+      skipped: Math.min(total, rawCount),
       redacted,
       reconciled,
+      rawOnly,
     };
   } finally {
     await releaseLock(lock);

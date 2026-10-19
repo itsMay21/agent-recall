@@ -40,9 +40,9 @@ export function scrubDeep<T>(value: T, home: string): T {
     if (typeof v === "string") return scrubString(v, home);
     if (Array.isArray(v)) return v.map(walk);
     if (v && typeof v === "object") {
-      const out: Record<string, unknown> = {};
-      for (const [k, val] of Object.entries(v)) out[k] = walk(val);
-      return out;
+      return Object.fromEntries(
+        Object.entries(v).map(([k, val]) => [scrubString(k, home), walk(val)]),
+      );
     }
     return v;
   };

@@ -5,7 +5,7 @@ export const AGENT_IDS = ["claude-code", "codex", "cursor", "hermes", "pi"] as c
 export type AgentId = (typeof AGENT_IDS)[number];
 
 export type Role = "user" | "assistant" | "tool" | "thinking" | "system" | "event";
-export type Status = "ok" | "error" | "rejected" | "superseded";
+export type Status = "ok" | "error";
 
 /** How sub-agent / sidechain transcripts are ingested. See docs/DECISIONS.md ADR-007. */
 export type SubagentMode = "off" | "calls" | "full";

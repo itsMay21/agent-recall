@@ -11,16 +11,11 @@ import { cursorAdapter } from "../src/adapters/cursor.js";
 import { hermesAdapter } from "../src/adapters/hermes.js";
 import type { RawEvent } from "../src/sync/types.js";
 
-// Load node:sqlite the same way the adapter does (so the bundler/vite can't rewrite the specifier),
-// but tolerate its absence on Node < 22.5 — the Hermes suite is skipped there.
+// The declared Node >=22.13 runtime must provide SQLite; a missing builtin fails the suite.
 const nodeRequire = createRequire(import.meta.url);
-let DatabaseSync: typeof DatabaseSyncCtor | undefined;
-try {
-  ({ DatabaseSync } = nodeRequire("node:" + "sqlite") as { DatabaseSync: typeof DatabaseSyncCtor });
-} catch {
-  // node:sqlite unavailable on this runtime
-}
-const hasSqlite = Boolean(DatabaseSync);
+const { DatabaseSync } = nodeRequire("node:" + "sqlite") as {
+  DatabaseSync: typeof DatabaseSyncCtor;
+};
 
 async function fixture(name: string, lines: unknown[]): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "ar-fix-"));
@@ -207,7 +202,22 @@ describe("cursor adapter (lossy)", () => {
   });
 });
 
-describe.skipIf(!hasSqlite)("hermes adapter (sqlite)", () => {
+describe("hermes adapter (sqlite)", () => {
+  it("surfaces incompatible databases instead of reporting successful empty history", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "ar-hermes-schema-"));
+    const file = join(dir, "state.db");
+    const db = new DatabaseSync(file);
+    db.close();
+    await expect(
+      hermesAdapter.locate({
+        cwd: "/proj",
+        home: dir,
+        env: { HERMES_DIR: dir },
+        subagents: "calls",
+      }),
+    ).rejects.toThrow();
+    await expect(hermesAdapter.parse(`${file}::missing`)).rejects.toThrow();
+  });
   it("locates by cwd and parses messages/tool_calls from state.db", async () => {
     const dir = await mkdtemp(join(tmpdir(), "ar-hermes-"));
     const db = new DatabaseSync!(join(dir, "state.db"));

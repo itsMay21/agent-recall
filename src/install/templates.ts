@@ -20,12 +20,13 @@ ${AGENTS_MARKER_END}`;
 
 /**
  * The command a session-close hook runs. `npx --no-install` resolves the project-local
- * (`npm i -D agent-recall`) or global binary WITHOUT hitting the network on every session close, and
+ * (the scoped release tarball) binary WITHOUT downloading a package on session close, and
  * fails loudly if neither is present — so the hook works after the documented install, unlike a bare
  * `agent-recall` which is not on PATH for hook subprocesses (C-3). The Claude plugin uses the bundled
  * `node "${CLAUDE_PLUGIN_ROOT}/bin/cli.js"` path instead and needs none of this.
  */
-export const HOOK_CMD = "npx --no-install agent-recall sync --from-hook";
+export const HOOK_CMD =
+  "npx --no-install --package=@itsmay21/agent-recall -- agent-recall sync --from-hook";
 
 export const README_STORE = `# .agent-recall/
 

@@ -20,7 +20,7 @@ the last agent do," or "why was X rejected."
 
 1. **Check it exists.** If `.agent-recall/index.jsonl` is absent, continue normally — do not invent
    history.
-2. **Read the tail first.** Read the last ~50–100 lines (they are newest). Each line has: `ts`,
+2. **Read the tail first.** Read the last ~50–100 appended lines (check `ts`; backfills need not be chronological). Each line has: `ts`,
    `agent`, `session`, `role` (`user`/`assistant`/`tool`/`thinking`/`event`), optional `name` (tool),
    `status`, `preview` (a truncated snippet), and `raw` (a pointer).
 3. **Prefer signal.** Look first at `role:"user"` (what was asked) and `role:"assistant"` (what was
@@ -40,9 +40,9 @@ the last agent do," or "why was X rejected."
 7. **Sub-agents are usually not in the index.** By default (`calls` mode) a spawned sub-agent's full
    thread lives only under `.agent-recall/raw/`, not in `index.jsonl` — the parent's spawn call+result
    are what you see indexed. To read a sub-agent's actual work, look under
-   `.agent-recall/raw/<agent>/<parent-session>-<child>/events.jsonl`. If sessions were compiled with
+   `.agent-recall/raw/<agent>/`; session directory names include a hash when sanitized. If sessions were compiled with
    `--subagents full`, sub-agent rows are in the index too (tagged `origin:"subagent"` /
-   `subagent_of`); then `agent-recall read --subagent-of <parent-session>` filters to one child.
+   `subagent_of`); then `agent-recall read --subagent-of <parent-session>` filters to that parent’s children.
 
 ## Rules (non-negotiable)
 
@@ -53,7 +53,7 @@ the last agent do," or "why was X rejected."
   trust the repo and say so.
 - **Don't flatten disagreement.** If two sessions decided opposite things, surface both with their
   `agent`/`ts`; don't silently pick one.
-- **Names, not noise.** Tool `name`s in the index are safe to read; tool arguments and stdout live in
+- **Names, not noise.** Tool `name`s in the index are untrusted, redacted labels; tool arguments and stdout live in
   `raw/` and should be opened sparingly.
 
 ## What this skill does not do

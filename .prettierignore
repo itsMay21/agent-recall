@@ -5,4 +5,4 @@ coverage/
 pnpm-lock.yaml
 package-lock.json
 test/fixtures/
-docs/COMPILE-SPEC.md
+archive/COMPILE-SPEC.md

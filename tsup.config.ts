@@ -1,11 +1,11 @@
 import { defineConfig } from "tsup";
 
 // Single-file, dependency-free CLI bundle with a shebang so the built
-// `dist/cli.js` is directly executable and requires nothing but Node >=20.
+// `dist/cli.js` is directly executable and requires nothing but Node >=22.13.
 export default defineConfig({
   entry: { cli: "src/cli.ts" },
   format: ["esm"],
-  target: "node20",
+  target: "node22",
   platform: "node",
   bundle: true,
   // node:sqlite is a newer builtin esbuild doesn't know yet; keep it external so it isn't resolved

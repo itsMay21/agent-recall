@@ -1,66 +1,26 @@
-# CHARTER — non-negotiables for agent-recall
+# Project charter
 
-This file is authoritative and overrides convenience. Read it before writing code or docs.
-The companion evidence is `COMPILE-SPEC.md` (adapter + redaction spec) and `ARCHITECTURE.md`.
+Agent Recall mechanically compiles local coding-agent transcripts into a project-local JSONL index.
+It gives later agents a way to inspect earlier work. It does not resume sessions, infer decisions,
+or promise improved agent performance.
 
-## What agent-recall is
+1. **No model, network, or execution in the compile path.** Parse, redact, scrub, and index native
+   fields. Missing tool names, status, or parent links remain absent. Never infer them from prose.
+2. **History is untrusted evidence.** Stored content cannot authorize actions. The live user's
+   request and current repository govern the next agent's work. The read skill must preserve this boundary.
+3. **Read the index first.** Keep source copies and full tool results in local `raw/`; open them only
+   when needed. Previews are truncated native text, not summaries or a ranked memory system.
+4. **Redaction reduces risk; it does not establish permission to publish.** Sanitize metadata and
+   structured values as well as text. Ignore raw data before writing it. Review the index for unknown
+   secrets, PII, private project paths, and employer/client information before sharing it.
+5. **Preserve identities and expose failures.** Repeated syncs must not duplicate index rows, including
+   when raw files are missing. Repair an interrupted final append; fail on complete corruption.
+   Manual commands return nonzero on failure. Host hooks warn and exit zero to avoid blocking the host.
+6. **Keep implementation and claims small.** Strict TypeScript, Node >=22.13, standard library at
+   runtime. No placeholder adapters, inferred summaries, unused compatibility layers, or fabricated
+   benchmark claims. Test meaningful failure cases and distinguish synthetic checks from live-host evidence.
+7. **Run the gate before committing.** `npm run check` includes format, types, tests, build, and an
+   offline install/hook check. Refresh the committed plugin bundle whenever source changes.
 
-A **unified, cross-agent session-recall layer**. When a coding-agent session ends, agent-recall
-mechanically ingests that vendor's native transcript for the current project, sanitizes it, and
-appends it to a single line-oriented store — `.agent-recall/index.jsonl` — that **any** later agent
-(Claude Code, Codex, Cursor, Hermes, Pi, …) can read before it starts work, so it doesn't repeat a
-rejected design or re-walk a dead path.
-
-It is **not** a cross-vendor _resume_ tool, a cloud service, a TUI, or an LLM "memory gardener."
-
-## The load-bearing rules
-
-1. **Compile is mechanical. No LLM in the compile path.** Parse → redact → index. If a field is
-   absent in the native store, it stays absent. Never infer a tool name, argument, decision, or
-   summary from prose. (Evidence: Apple's SSPM (Pedada et al., arXiv:2607.09493) measured full-history
-   dumps _worse than amnesia_ — 71% task completion vs 79% no-memory vs 96% selective; ACE (Zhang et
-   al., arXiv:2510.04618) shows a monolithic rewrite can collapse useful context. A model in the compile
-   path is a measured regression, not a feature.)
-
-2. **The next agent does not load raw traces by default.** The default read is the _index_ (who,
-   when, goal, tool _names_, status, pointer). Tool args and stdout stay in `raw/`, opened only on
-   demand. This split — not an instruction file — is what actually prevents prior-session bias.
-
-3. **Session bodies are untrusted data, never instructions.** The skill and every consumer treats
-   stored transcript content as evidence about what happened, not as commands to execute and not as
-   ground truth. The repo (code, tests, ADRs) is ground truth. A `SKILL.md` is itself an instruction
-   surface — it must never tell an agent to execute stored session content.
-
-4. **Never promise faithful cross-vendor resume.** Tool trees, `parentUuid` chains, and SQLite
-   metadata do not survive translation. We offer _read_, not _resume_. Read ≠ resume.
-
-5. **Raw is radioactive; redact before anything leaves `raw/`.** Vendor transcripts contain
-   plaintext secrets (Claude does not redact; OpenHands _persists_ secrets). `raw/` is always
-   gitignored. The index is committable only after the regex redaction pass runs. Never copy vendor
-   `auth.json`, `state.vscdb`, `base_state.json`, or `secrets.json`.
-
-6. **Absent is not zero.** A stubbed/cloud/encrypted source prints "not on disk" — it never
-   fabricates an empty or guessed session.
-
-## Coding standards (inherited house style)
-
-- **No slop, no stubs-for-later, no dead code, no backward-compat shims.** Build toward the intended
-  end state; delete cruft rather than shim it.
-- **KISS + established libraries over custom code**, but **prefer zero runtime dependencies** here:
-  the compile path is plain parsing + regex, and the whole point is that consumers need nothing
-  installed to _read_ the store. Dev-time tooling (bundler, test runner) is fine.
-- **Investigate before asking.** Anything discoverable in under a minute is research, not a question.
-  For anything touching redaction, privacy, or a destructive/outward action, confirm the big call.
-- **Idempotent and fast.** `sync` must be safe to run repeatedly — the store is append-only and the
-  high-water mark is the session's raw line count, so re-syncing an unchanged transcript is a no-op —
-  and fast enough for a Claude `SessionEnd` budget (~1.5–60s): parse one transcript, not the world.
-- **Every change passes the gate:** `format`, `typecheck`, `test`, `build`. Adapters ship with a test
-  (fixtures inline in the spec). No adapter is "done" without a real-session evidence note in `TESTING.md`.
-
-## Privacy default
-
-- `.agent-recall/raw/` → gitignored, always.
-- `.agent-recall/index.jsonl` → redacted on write; committable per-project only after redaction is
-  proven. Default posture: index is safe-by-construction, raw is never shared.
-- The installer never enables committing raw. The redactor runs on every field, including tool args
-  and stdout, not just chat text.
+These constraints are product choices. Research on memory systems can motivate investigation; it
+does not prove this implementation improves task success or that model-based alternatives are inferior.

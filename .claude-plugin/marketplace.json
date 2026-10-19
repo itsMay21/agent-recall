@@ -1,13 +1,16 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "agent-recall",
-  "owner": { "name": "Mayank Saini", "url": "https://github.com/itsMay21" },
+  "owner": {
+    "name": "Mayank Saini",
+    "url": "https://github.com/itsMay21"
+  },
   "plugins": [
     {
       "name": "agent-recall",
       "source": "./plugin",
       "description": "Unified cross-agent session recall: compile prior Claude/Codex/Cursor/Hermes/Pi sessions into .agent-recall/index.jsonl and read them before starting.",
-      "version": "0.1.0"
+      "version": "0.2.0"
     }
   ]
 }

@@ -1,0 +1,2 @@
+# Synthetic Slack token fixture, explicitly constructed as fake in test/redact.test.ts.
+8bc363c700abd76b76c302a52b89a844665298a0:test/redact.test.ts:generic-api-key:13
