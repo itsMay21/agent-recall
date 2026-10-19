@@ -1,4 +1,4 @@
-# Code ownership (advisory until branch protection / Pro enforces CODEOWNER review).
+# Code ownership identifies reviewers. Main requires PRs and CI; owner approval is not mandatory.
 # The load-bearing, security-sensitive surfaces:
 /src/sync/        @itsMay21
 /src/adapters/    @itsMay21

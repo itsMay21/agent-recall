@@ -45,6 +45,15 @@ safety, home-path scrub) needs a canary test proving the new shape is caught, in
 
 ## Commits & PRs
 
+Every branch is protected against force pushes and deletion. Push new commits normally;
+create a new branch instead of rewriting published history. Protected topic branches are
+retained even though automatic branch cleanup is enabled in repository settings.
+
+Changes to `main` must arrive through a pull request with all four Node/OS checks and the
+history secret scan passing against the current base. Resolve review conversations before
+merging. The sole maintainer can merge without a second person's approval; CODEOWNERS
+identifies the owner of sensitive files. No ruleset bypass is configured.
+
 Small, focused commits with a clear message. Fill in the PR template. Reference any finding id
 (e.g. `F-1.1`) or issue you're addressing.
 
